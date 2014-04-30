@@ -2034,13 +2034,6 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     #     end
     # end
 
-    # Undef is a bad type
-    for ty in atypes
-        if Undef <: ty
-            return NF
-        end
-    end
-
     if !isa(linfo,LambdaStaticData) || meth[3].func.env !== ()
         return NF
     end
@@ -2165,7 +2158,10 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     # when 1 method matches the inferred types, there is still a chance
     # of a no-method error at run time, unless the inferred types are a
     # subset of the method signature.
-    if !(atypes <: meth[1])
+    methargs = meth[1]
+    nm = length(methargs)
+    if !(atypes <: methargs)
+        incompletematch = true
         t = Expr(:call) # tuple(argexprs...)
         t.typ = Tuple
         argexprs2 = t.args
@@ -2176,20 +2172,14 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
         thrw.typ = None
         push!(stmts, thrw)
         push!(stmts, icall)
-        incompletematch = true
     else
         incompletematch = false
     end
-    methargs = meth[1]
-    nm = length(methargs)
 
     for i=na:-1:1 # stmts_free needs to be calculated in reverse-argument order
         a = args[i]
         aei = argexprs[i]
         aeitype = argtype = exprtype(aei)
-        if aeitype == ANY
-            aeitype = Any
-        end
         needtypeassert = false
         if incompletematch
             if isva
@@ -2217,6 +2207,9 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
                         @assert i==nm
                     end
                 end
+            end
+            if isa(methitype,TypeVar) # eliminate ANY
+                methitype = methitype.ub
             end
             if !(aeitype <: methitype)
                 needtypeassert = true
