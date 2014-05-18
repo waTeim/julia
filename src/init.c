@@ -134,6 +134,24 @@ static int is_addr_on_stack(void *addr)
 #endif
 }
 
+void **protected_buffers;
+int n_protected_buffers = 0;
+
+static int is_addr_protected(void *addr)
+{
+    for(int i = 0; i < 2*n_protected_buffers; i += 2) {
+        if (addr >= protected_buffers[i] && addr < protected_buffers[i+1])
+            return 1;
+    }
+    return 0;
+}
+
+DLLEXPORT void jl_update_protected_buffers(void *buf, int n)
+{
+    protected_buffers = (void**)buf;
+    n_protected_buffers = n;
+}
+
 #if defined(__linux__) || defined(__FreeBSD__)
 extern int in_jl_;
 void segv_handler(int sig, siginfo_t *info, void *context)
@@ -145,6 +163,12 @@ void segv_handler(int sig, siginfo_t *info, void *context)
         sigaddset(&sset, SIGSEGV);
         sigprocmask(SIG_UNBLOCK, &sset, NULL);
         jl_throw(jl_stackovf_exception);
+    }
+    else if (is_addr_protected(info->si_addr)) {
+        sigemptyset(&sset);
+        sigaddset(&sset, SIGSEGV);
+        sigprocmask(SIG_UNBLOCK, &sset, NULL);
+        jl_throw(jl_memory_exception);
     }
     else {
         uv_tty_reset_mode();
