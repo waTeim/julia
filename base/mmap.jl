@@ -96,8 +96,22 @@ function mmap_stream_settings(s::IO)
     flags = MAP_SHARED
     return prot, flags, (prot & PROT_WRITE) > 0
 end
+end   # @unix_only
 
-# Mmapped-array constructor
+@windows_only begin
+function msync(p::Ptr, len::Integer)
+    status = bool(ccall(:FlushViewOfFile, stdcall, Cint, (Ptr{Void}, Csize_t), p, len))
+    if !status
+        error("could not msync")
+    end
+end
+end
+
+
+## Mmapped-array constructor ##
+global mmap_array
+let protected_buffers = Array(Uint, 0)
+@unix_only begin
 function mmap_array{T,N}(::Type{T}, dims::NTuple{N,Integer}, s::IO, offset::FileOffset; grow::Bool=true)
     prot, flags, iswrite = mmap_stream_settings(s)
     len = prod(dims)*sizeof(T)
@@ -110,15 +124,17 @@ function mmap_array{T,N}(::Type{T}, dims::NTuple{N,Integer}, s::IO, offset::File
         pmap, delta = mmap(len, prot, flags, fd(s), offset)
     end
     A = pointer_to_array(pointer(T, uint(pmap)+delta), dims)
-    finalizer(A,x->munmap(pmap,len+delta))
+    if !iswrite
+        set_protected(A)
+        finalizer(A,x->(munmap(pmap,len+delta); clear_protected(A)))
+    else
+        finalizer(A,x->munmap(pmap,len+delta))
+    end
     return A
 end
+end  # @unix_only
 
-end
-
-### Windows implementation ###
 @windows_only begin
-# Mmapped-array constructor
 function mmap_array{T,N}(::Type{T}, dims::NTuple{N,Integer}, s::IO, offset::FileOffset)
     shandle = _get_osfhandle(RawFD(fd(s)))
     if int(shandle.handle) == -1
@@ -145,7 +161,12 @@ function mmap_array{T,N}(::Type{T}, dims::NTuple{N,Integer}, s::IO, offset::File
         error("could not create mapping view")
     end
     A = pointer_to_array(pointer(T, viewhandle), dims)
-    finalizer(A, x->munmap(viewhandle, mmaphandle))
+    if ro
+        set_protected(A)
+        finalizer(A,x->(munmap(viewhandle, mmaphandle); clear_protected(A)))
+    else
+        finalizer(A, x->munmap(viewhandle, mmaphandle))
+    end
     return A
 end
 
@@ -156,15 +177,30 @@ function munmap(viewhandle::Ptr, mmaphandle::Ptr)
         error("could not unmap view")
     end
 end
+end   # @windows_only
 
-function msync(p::Ptr, len::Integer)
-    status = bool(ccall(:FlushViewOfFile, stdcall, Cint, (Ptr{Void}, Csize_t), p, len))
-    if !status
-        error("could not msync")
+function set_protected(A::Array)
+    Astart = pointer(A)
+    Aend = Astart + length(A)*sizeof(eltype(A))
+    push!(protected_buffers, Astart)
+    push!(protected_buffers, Aend)
+    ccall(:jl_update_protected_buffers, Void, (Ptr{Void}, Cint),
+          protected_buffers, length(protected_buffers)>>1)
+end
+
+function clear_protected(A::Array)
+    Astart = uint(pointer(A))
+    for i = 1:2:length(protected_buffers)
+        if protected_buffers[i] == Astart
+            deleteat!(protected_buffers, i:i+1)
+            ccall(:jl_update_protected_buffers, Void, (Ptr{Void}, Cint),
+                  protected_buffers, length(protected_buffers)>>1)
+            return
+        end
     end
+    warn("Array not found in protected list")
 end
-
-end
+end  # let protected_buffers
 
 # Mmapped-bitarray constructor
 function mmap_bitarray{N}(dims::NTuple{N,Integer}, s::IOStream, offset::FileOffset)
