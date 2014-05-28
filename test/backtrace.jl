@@ -7,5 +7,10 @@ for l in bt
         break
     end
 end
-
 @test have_backtrace
+
+# Catching stack overflows
+let
+    f(x) = f(x+1)
+    @test_throws StackOverflowError f(1)
+end
