@@ -990,9 +990,10 @@ endif
 arpack-ng_$(ARPACK_VER).tar.gz:
 	$(JLDOWNLOAD) $@ http://forge.scilab.org/index.php/p/arpack-ng/downloads/get/$@
 	touch -c $@
-arpack-ng-$(ARPACK_VER)/configure: arpack-ng_$(ARPACK_VER).tar.gz
+arpack-ng-$(ARPACK_VER)/configure: arpack-ng_$(ARPACK_VER).tar.gz arpack-xlahqr.patch
 	$(JLCHECKSUM) $<
 	$(TAR) zxf $<
+	cd arpack-ng-$(ARPACK_VER)/SRC && patch -p1 < ../../arpack-xlahqr.patch
 	touch -c $@
 
 ifeq ($(USE_ATLAS), 1)
