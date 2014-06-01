@@ -1923,6 +1923,9 @@ function effect_free(e::ANY, sv, allow_volatile::Bool)
                         return true
                     end
                 end
+                # fall-through
+            else
+                return false
             end
         elseif e.head === :new
             if !allow_volatile
@@ -1932,8 +1935,9 @@ function effect_free(e::ANY, sv, allow_volatile::Bool)
                     return false
                 end
             end
+            # fall-through
         elseif e.head === :return
-            # pass
+            # fall-through
         else
             return false
         end
@@ -2247,11 +2251,11 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
                     end
                 end
             end
-            if isa(methitype,TypeVar) # eliminate ANY
+            if isa(methitype, TypeVar)
                 methitype = methitype.ub
             end
             if !(aeitype <: methitype)
-                #TODO: make Undef a faster special-case
+                #TODO: make Undef a faster special-case?
                 needtypeassert = true
                 aeitype = methitype
             end
