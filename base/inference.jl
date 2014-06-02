@@ -1853,6 +1853,17 @@ function without_linenums(a::Array{Any,1})
     l
 end
 
+contains_typevar(T::ANY) = false
+contains_typevar(T::TypeVar) = true
+function contains_typevar(T::DataType)
+    for p in T.parameters
+        if contains_typevar(p)
+            return true
+        end
+    end
+    return false
+end
+
 const _pure_builtins = {tuple, tupleref, tuplelen, fieldtype, apply_type, is, isa, typeof, typeassert} # known affect-free calls (also effect-free)
 const _pure_builtins_volatile = {getfield, arrayref} # known effect-free calls (might not be affect-free)
 
@@ -2042,7 +2053,7 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     sp = tuple(sp..., linfo.sparams...)
     spvals = { sp[i] for i in 2:2:length(sp) }
     for i=1:length(spvals)
-        if isa(spvals[i],TypeVar)
+        if contains_typevar(spvals[i])
             return NF
         end
         if isa(spvals[i],Symbol)
@@ -2054,6 +2065,9 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     nm = length(methargs)
     if !(atypes <: methargs)
         incompletematch = true
+        if !inline_incompletematch_allowed
+            return NF
+        end
     else
         incompletematch = false
     end
@@ -2421,6 +2435,10 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     end
     return (expr, stmts)
 end
+# The inlining incomplete matches optimization doesn't work well during the first
+# pass of bootstrapping, since it assumes the method call list is relatively stable.
+# It is disabled here, and enabled later in sysimg.jl
+inline_incompletematch_allowed = false
 
 inline_worthy(body, cost::Real) = true
 function inline_worthy(body::Expr, cost::Real=1.0) # precondition: 0<cost
