@@ -120,6 +120,10 @@ Once again, this is equivalent to editing the ``REQUIRE`` file to remove the lin
 While ``Pkg.add`` and ``Pkg.rm`` are convenient for adding and removing requirements for a single package, when you want to add or remove multiple packages, you can call ``Pkg.edit()`` to manually change the contents of ``REQUIRE`` and then update your packages accordingly.
 ``Pkg.edit()`` does not roll back the contents of ``REQUIRE`` if ``Pkg.resolve()`` fails – rather, you have to run ``Pkg.edit()`` again to fix the files contents yourself.
 
+Because the package manager uses git internally to manage the package git repositories, users may run into protocol issues (if behind a firewall, for example), when running ``Pkg.add``. The following command can be run from the command line to tell git to use 'https' instead of the 'git' protocol when cloning repositories::
+
+    git config --global url."https://".insteadOf git://
+
 Installing Unregistered Packages
 --------------------------------
 
@@ -460,6 +464,12 @@ For example, the line::
     Distributions 0.1
 
 is satisfied by any version of ``Distributions`` greater than or equal to ``0.1.0``.
+Suffixing a version with `-` allows any pre-release versions as well. For example::
+
+    Distributions 0.1-
+
+is satisfied by pre-release versions such as ``0.1-dev`` or ``0.1-rc1``, or by any version greater than or equal to ``0.1.0``.
+
 This requirement entry::
 
     Distributions 0.1 0.2.5
@@ -469,7 +479,6 @@ If you want to indicate that any ``0.1.x`` version will do, you will want to wri
 
     Distributions 0.1 0.2-
 
-The ``0.2-`` "pseudo-version" is less than all real version numbers that start with ``0.2``.
 If you want to start accepting versions after ``0.2.7``, you can write::
 
     Distributions 0.1 0.2- 0.2.7

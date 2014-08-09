@@ -340,12 +340,12 @@ static Value *literal_pointer_val(jl_value_t *p)
     if (!imaging_mode)
         return literal_static_pointer_val(p, jl_pvalue_llvmt);
     if (jl_is_datatype(p)) {
-        jl_datatype_t* addr = (jl_datatype_t*)p;
+        jl_datatype_t *addr = (jl_datatype_t*)p;
         // DataTypes are prefixed with a +
         return julia_gv("+", addr->name->name, addr->name->module, p);
     }
     if (jl_is_func(p)) {
-        jl_lambda_info_t* linfo = ((jl_function_t*)p)->linfo;
+        jl_lambda_info_t *linfo = ((jl_function_t*)p)->linfo;
         // Functions are prefixed with a -
         if (linfo != NULL)
             return julia_gv("-", linfo->name, linfo->module, p);
@@ -353,12 +353,12 @@ static Value *literal_pointer_val(jl_value_t *p)
         return julia_gv("jl_method#", p);
     }
     if (jl_is_lambda_info(p)) {
-        jl_lambda_info_t* linfo = (jl_lambda_info_t*)p;
+        jl_lambda_info_t *linfo = (jl_lambda_info_t*)p;
         // Type-inferred functions are prefixed with a -
         return julia_gv("-", linfo->name, linfo->module, p);
     }
     if (jl_is_symbol(p)) {
-        jl_sym_t* addr = (jl_sym_t*)p;
+        jl_sym_t *addr = (jl_sym_t*)p;
         // Symbols are prefixed with jl_sym#
         return julia_gv("jl_sym#", addr, NULL, p);
     }
@@ -1520,8 +1520,14 @@ static Value *boxed(Value *v, jl_codectx_t *ctx, jl_value_t *jt)
         if (jl_subtype(jt2, jt, 0))
             jt = jt2;
     }
-
-    if (jt == jl_bottom_type || v == NULL || dyn_cast<UndefValue>(v) != 0 || t == NoopType) {
+    UndefValue *uv = NULL;
+    if (jt == jl_bottom_type || v == NULL || (uv = dyn_cast<UndefValue>(v)) != 0 || t == NoopType) {
+        if (uv != NULL && jl_is_datatype(jt)) {
+            jl_datatype_t *jb = (jl_datatype_t*)jt;
+            // We have an undef value on a hopefully dead branch
+            if (jl_isbits(jb) && jb->size != 0)
+                return UndefValue::get(jl_pvalue_llvmt);
+        }
         jl_value_t *s = static_void_instance(jt);
         if (jl_is_tuple(jt) && jl_tuple_len(jt) > 0)
             jl_add_linfo_root(ctx->linfo, s);

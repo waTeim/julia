@@ -271,6 +271,7 @@ ifneq ($(LLVM_CXXFLAGS),)
 LLVM_FLAGS += CXXFLAGS="$(LLVM_CXXFLAGS)"
 LLVM_MFLAGS += CXXFLAGS="$(LLVM_CXXFLAGS)"
 endif
+LLVM_MFLAGS += $(LLVM_CC)
 
 ifneq ($(LLVM_CLANG_TAR),)
 $(LLVM_CLANG_TAR):
@@ -385,6 +386,7 @@ endif
 ifeq ($(LLVM_VER),3.3)
 	patch -p0 < llvm-3.3.patch
 	patch -p0 < instcombine-llvm-3.3.patch
+	patch -p0 < int128-vector.llvm-3.3.patch
 	(cd llvm-$(LLVM_VER) && patch < ../osx-10.10.llvm-3.3.patch)
 ifeq ($(OS),WINNT)
 ifeq ($(ARCH),x86_64)
@@ -419,13 +421,12 @@ $(LLVM_OBJ_TARGET): $(LLVM_OBJ_SOURCE) | $(llvm_python_workaround)
 	# LLVM has weird install prefixes (see llvm-$(LLVM_VER)/build_$(LLVM_BUILDTYPE)/Makefile.config for the full list)
 	# We map them here to the "normal" ones, which means just prefixing "PROJ_" to the variable name.
 	export PATH=$(abspath llvm-$(LLVM_VER)/python2_path):$$PATH && \
-	$(MAKE) -C llvm-$(LLVM_VER)/build_$(LLVM_BUILDTYPE) install $(MAKE_COMMON) PROJ_libdir=$(build_libdir) PROJ_bindir=$(build_bindir) PROJ_includedir=$(build_includedir)
+	$(MAKE) -C llvm-$(LLVM_VER)/build_$(LLVM_BUILDTYPE) install $(LLVM_MFLAGS) $(MAKE_COMMON) PROJ_libdir=$(build_libdir) PROJ_bindir=$(build_bindir) PROJ_includedir=$(build_includedir)
 	touch -c $@
 
 reinstall-llvm:
 	export PATH=$(abspath llvm-$(LLVM_VER)/python2_path):$$PATH && \
-	$(MAKE) -C llvm-$(LLVM_VER)/build_$(LLVM_BUILDTYPE) install $(MAKE_COMMON) PROJ_libdir=$(build_libdir) PROJ_bindir=$(build_bindir)
-	touch -c $@
+	$(MAKE) -C llvm-$(LLVM_VER)/build_$(LLVM_BUILDTYPE) install $(LLVM_MFLAGS) $(MAKE_COMMON) PROJ_libdir=$(build_libdir) PROJ_bindir=$(build_bindir)
 
 clean-llvm:
 	-$(MAKE) -C llvm-$(LLVM_VER)/build_$(LLVM_BUILDTYPE) clean
@@ -1660,4 +1661,4 @@ install-git: $(GIT_TARGET)
 
 .PHONY: default compile install cleanall distcleanall \
 	get-* configure-* compile-* check-* install-* \
-	clean-* distclean-*
+	clean-* distclean-* reinstall-*

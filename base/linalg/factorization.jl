@@ -80,7 +80,7 @@ function getindex{T<:BlasFloat}(C::CholeskyPivoted{T}, d::Symbol)
     throw(KeyError(d))
 end
 
-show(io::IO, C::Cholesky) = (println("$(typeof(C)) with factor:");show(io,C[symbol(C.uplo)]))
+show(io::IO, C::Cholesky) = (println(io,"$(typeof(C)) with factor:");show(io,C[symbol(C.uplo)]))
 
 A_ldiv_B!{T<:BlasFloat}(C::Cholesky{T}, B::StridedVecOrMat{T}) = LAPACK.potrs!(C.uplo, C.UL, B)
 A_ldiv_B!(C::Cholesky, B::StridedVecOrMat) = C.uplo=='L' ? Ac_ldiv_B!(Triangular(C.UL,C.uplo,'N'), A_ldiv_B!(Triangular(C.UL,C.uplo,'N'), B)) : A_ldiv_B!(Triangular(C.UL,C.uplo,'N'), Ac_ldiv_B!(Triangular(C.UL,C.uplo,'N'), B))
@@ -179,9 +179,13 @@ qrfact{T<:BlasFloat}(A::StridedMatrix{T}; pivot=false) = qrfact!(copy(A),pivot=p
 qrfact{T}(A::StridedMatrix{T}; pivot=false) = (S = typeof(one(T)/norm(one(T)));S != T ? qrfact!(convert(AbstractMatrix{S},A), pivot=pivot) : qrfact!(copy(A),pivot=pivot))
 qrfact(x::Number) = qrfact(fill(x,1,1))
 
-function qr(A::Union(Number, AbstractMatrix); pivot=false, thin::Bool=true)
+function qr(A::Union(Number, AbstractMatrix); pivot::Bool=false, thin::Bool=true)
     F = qrfact(A, pivot=pivot)
-    full(F[:Q], thin=thin), F[:R]
+    if pivot
+        full(F[:Q], thin=thin), F[:R], F[:p]
+    else
+        full(F[:Q], thin=thin), F[:R]
+    end
 end
 
 convert{T}(::Type{QR{T}},A::QR) = QR(convert(AbstractMatrix{T}, A.factors), convert(Vector{T}, A.τ))

@@ -17,6 +17,15 @@
 #include <unistd.h>
 #endif
 
+#if defined(__APPLE__)
+#define __need_ucontext64_t
+#if MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_10
+#include <sys/_types/_ucontext64.h>
+#else
+#include <machine/_structs.h>
+#endif
+#endif
+
 #include <errno.h>
 #include <signal.h>
 
@@ -155,11 +164,11 @@ void sigdie_handler(int sig, siginfo_t *info, void *context)
     }
     ios_printf(ios_stderr,"\nsignal (%d): %s\n", sig, strsignal(sig));
 #ifdef __APPLE__
-    gdbbacktrace();
+    bt_size = rec_backtrace_ctx(bt_data, MAX_BT_SIZE, (bt_context_t)&((ucontext64_t*)context)->uc_mcontext64->__ss);
 #else
     bt_size = rec_backtrace_ctx(bt_data, MAX_BT_SIZE, (ucontext_t*)context);
-    jlbacktrace();
 #endif
+    jlbacktrace();
     if (sig != SIGSEGV &&
         sig != SIGBUS &&
         sig != SIGILL &&
@@ -391,7 +400,7 @@ void sigint_handler(int sig, siginfo_t *info, void *context)
 struct uv_shutdown_queue_item { uv_handle_t *h; struct uv_shutdown_queue_item *next; };
 struct uv_shutdown_queue { struct uv_shutdown_queue_item *first; struct uv_shutdown_queue_item *last; };
 
-static void jl_uv_exitcleanup_add(uv_handle_t* handle, struct uv_shutdown_queue *queue)
+static void jl_uv_exitcleanup_add(uv_handle_t *handle, struct uv_shutdown_queue *queue)
 {
     struct uv_shutdown_queue_item *item = (struct uv_shutdown_queue_item*)malloc(sizeof(struct uv_shutdown_queue_item));
     item->h = handle;
@@ -401,7 +410,7 @@ static void jl_uv_exitcleanup_add(uv_handle_t* handle, struct uv_shutdown_queue 
     queue->last = item;
 }
 
-static void jl_uv_exitcleanup_walk(uv_handle_t* handle, void *arg)
+static void jl_uv_exitcleanup_walk(uv_handle_t *handle, void *arg)
 {
     if (handle != (uv_handle_t*)jl_uv_stdout && handle != (uv_handle_t*)jl_uv_stderr)
         jl_uv_exitcleanup_add(handle, (struct uv_shutdown_queue*)arg);
@@ -434,7 +443,7 @@ DLLEXPORT void uv_atexit_hook()
 
     jl_gc_run_all_finalizers();
 
-    uv_loop_t* loop = jl_global_event_loop();
+    uv_loop_t *loop = jl_global_event_loop();
     struct uv_shutdown_queue queue = {NULL, NULL};
     uv_walk(loop, jl_uv_exitcleanup_walk, &queue);
     // close stdout and stderr last, since we like being
@@ -624,6 +633,13 @@ void darwin_stack_overflow_handler(unw_context_t *uc)
     jl_rethrow();
 }
 
+void darwin_accerr_handler(unw_context_t *uc)
+{
+    bt_size = rec_backtrace_ctx(bt_data, MAX_BT_SIZE, uc);
+    jl_exception_in_transit = jl_memory_exception;
+    jl_rethrow();
+}
+
 #define HANDLE_MACH_ERROR(msg, retval) \
     if (retval!=KERN_SUCCESS) { mach_error(msg ":", (retval)); jl_exit(1); }
 
@@ -631,6 +647,12 @@ void darwin_stack_overflow_handler(unw_context_t *uc)
 extern kern_return_t profiler_segv_handler(mach_port_t,mach_port_t,mach_port_t,exception_type_t,exception_data_t,mach_msg_type_number_t);
 extern volatile mach_port_t mach_profiler_thread;
 #endif
+
+enum x86_trap_flags {
+    USER_MODE = 0x4,
+    WRITE_FAULT = 0x2,
+    PAGE_PRESENT = 0x1
+};
 
 //exc_server uses dlsym to find symbol
 DLLEXPORT
@@ -656,7 +678,8 @@ kern_return_t catch_exception_raise(mach_port_t            exception_port,
     ret = thread_get_state(thread,x86_EXCEPTION_STATE64,(thread_state_t)&exc_state,&exc_count);
     HANDLE_MACH_ERROR("thread_get_state(1)",ret);
     uint64_t fault_addr = exc_state.__faultvaddr;
-    if (is_addr_on_stack((void*)fault_addr)) {
+    if (is_addr_on_stack((void*)fault_addr) ||
+        ((exc_state.__err & PAGE_PRESENT) == PAGE_PRESENT)) {
         ret = thread_get_state(thread,x86_THREAD_STATE64,(thread_state_t)&state,&count);
         HANDLE_MACH_ERROR("thread_get_state(2)",ret);
         old_state = state;
@@ -677,7 +700,10 @@ kern_return_t catch_exception_raise(mach_port_t            exception_port,
         memset(uc,0,sizeof(unw_context_t));
         memcpy(uc,&old_state,sizeof(x86_thread_state64_t));
         state.__rdi = (uint64_t)uc;
-        state.__rip = (uint64_t)darwin_stack_overflow_handler;
+        if ((exc_state.__err & PAGE_PRESENT) == PAGE_PRESENT)
+            state.__rip = (uint64_t)darwin_accerr_handler;
+        else
+            state.__rip = (uint64_t)darwin_stack_overflow_handler;
 
         state.__rbp = state.__rsp;
         ret = thread_set_state(thread,x86_THREAD_STATE64,(thread_state_t)&state,count);
@@ -736,7 +762,7 @@ void julia_init(char *imageFile)
     init_stdio();
 
 #if defined(JL_USE_INTEL_JITEVENTS)
-    const char* jit_profiling = getenv("ENABLE_JITPROFILING");
+    const char *jit_profiling = getenv("ENABLE_JITPROFILING");
     if (jit_profiling && atoi(jit_profiling)) {
         jl_using_intel_jitevents = 1;
 #if defined(__linux__)
@@ -961,7 +987,7 @@ DLLEXPORT void jl_install_sigint_handler()
 }
 
 extern int asprintf(char **str, const char *fmt, ...);
-extern void * __stack_chk_guard;
+extern void *__stack_chk_guard;
 
 DLLEXPORT int julia_trampoline(int argc, char **argv, int (*pmain)(int ac,char *av[]))
 {

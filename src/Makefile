@@ -22,7 +22,7 @@ endif
 # In LLVM >= 3.4, --ldflags has only options, and --system-libs has the libraries.
 LLVMLINK = $(call exec,$(LLVM_CONFIG) --ldflags) $(call exec,$(LLVM_CONFIG) --libs) $(call exec,$(LLVM_CONFIG) --ldflags) $(call exec,$(LLVM_CONFIG) --system-libs 2> /dev/null)
 ifeq ($(USE_LLVM_SHLIB),1)
-LLVMLINK = $(call exec,$(LLVM_CONFIG) --ldflags) -lLLVM-$(LLVM_VER)
+LLVMLINK = $(call exec,$(LLVM_CONFIG) --ldflags) -lLLVM-$(call exec,$(LLVM_CONFIG) --version)
 endif
 
 COMMON_LIBS = -L$(build_shlibdir) -L$(build_libdir) $(LIBUV) $(LIBUTF8PROC) $(NO_WHOLE_ARCHIVE) $(LLVMLINK) $(OSLIBS)
@@ -90,6 +90,7 @@ endif
 $(build_shlibdir)/libjulia-debug.$(SHLIB_EXT): julia.expmap $(DOBJS) flisp/libflisp-debug.a support/libsupport-debug.a $(LIBUV)
 	@$(call PRINT_LINK, $(CXXLD) $(DEBUGFLAGS) $(DOBJS) $(RPATH_ORIGIN) -o $@ $(LDFLAGS) $(DEBUG_LIBS))
 	$(INSTALL_NAME_CMD)libjulia-debug.$(SHLIB_EXT) $@
+	$(DSYMUTIL) $@
 libjulia-debug.a: julia.expmap $(DOBJS) flisp/libflisp-debug.a support/libsupport-debug.a
 	rm -f $@
 	@$(call PRINT_LINK, ar -rcs $@ $(DOBJS))
@@ -104,6 +105,7 @@ endif
 $(build_shlibdir)/libjulia.$(SHLIB_EXT): julia.expmap $(OBJS) flisp/libflisp.a support/libsupport.a $(LIBUV)
 	@$(call PRINT_LINK, $(CXXLD) $(SHIPFLAGS) $(OBJS) $(RPATH_ORIGIN) -o $@ $(LDFLAGS) $(RELEASE_LIBS) $(SONAME))
 	$(INSTALL_NAME_CMD)libjulia.$(SHLIB_EXT) $@
+	$(DSYMUTIL) $@
 libjulia.a: julia.expmap $(OBJS) flisp/libflisp.a support/libsupport.a
 	rm -f $@
 	@$(call PRINT_LINK, ar -rcs $@ $(OBJS))

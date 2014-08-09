@@ -660,7 +660,7 @@ function read!{T}(s::AsyncStream, a::Array{T})
     return a
 end
 
-function read!{Uint8}(s::AsyncStream, a::Vector{Uint8})
+function read!(s::AsyncStream, a::Vector{Uint8})
     nb = length(a)
     sbuf = s.buffer
     @assert sbuf.seekable == false
@@ -851,7 +851,7 @@ end
 
 function accept(server::UVServer, client::AsyncStream)
     if server.status != StatusActive 
-        error("server not connected; make sure \"listen\" has been called")
+        throw(ArgumentError("server not connected; make sure \"listen\" has been called"))
     end
     while isopen(server)
         err = accept_nonblock(server,client)
@@ -862,7 +862,7 @@ function accept(server::UVServer, client::AsyncStream)
         end
         stream_wait(server,server.connectnotify)
     end
-    error("server was closed while attempting to accept a client")
+    uv_error("accept", UV_ECONNABORTED)
 end
 
 const BACKLOG_DEFAULT = 511
