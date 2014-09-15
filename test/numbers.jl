@@ -843,7 +843,7 @@ end
 @test_throws MethodError complex(1,2) > 0
 @test_throws MethodError complex(1,2) > complex(0,0)
 
-# div, fld, rem, mod
+# div, fld, cld, rem, mod
 for yr = {
     1:6,
     0.25:0.25:6.0,
@@ -912,9 +912,48 @@ for yr = {
             @test fld(-x,-y) == +2
         end
 
-        # check everything else in terms of div & fld
+        # check basic cld functionality
+        if 0 == x
+            @test cld(+x,+y) == 0
+            @test cld(+x,-y) == 0
+            @test cld(-x,+y) == 0
+            @test cld(-x,-y) == 0
+        end
+        if 0 < x < 1y
+            @test cld(+x,+y) == +1
+            @test cld(+x,-y) == +0
+            @test cld(-x,+y) == +0
+            @test cld(-x,-y) == +1
+        end
+        if 1y == x
+            @test cld(+x,+y) == +1
+            @test cld(+x,-y) == -1
+            @test cld(-x,+y) == -1
+            @test cld(-x,-y) == +1
+        end
+        if 1y < x < 2y
+            @test cld(+x,+y) == +2
+            @test cld(+x,-y) == -1
+            @test cld(-x,+y) == -1
+            @test cld(-x,-y) == +2
+        end
+        if 2y == x
+            @test cld(+x,+y) == +2
+            @test cld(+x,-y) == -2
+            @test cld(-x,+y) == -2
+            @test cld(-x,-y) == +2
+        end
+        if 2y < x < 3y
+            @test cld(+x,+y) == +3
+            @test cld(+x,-y) == -2
+            @test cld(-x,+y) == -2
+            @test cld(-x,-y) == +3
+        end
+
+        # check everything else in terms of div, fld, cld
         d = div(x,y)
         f = fld(x,y)
+        c = cld(x,y)
         r = rem(x,y)
         m = mod(x,y)
 
@@ -928,10 +967,12 @@ for yr = {
 
         @test typeof(d) <: t1
         @test typeof(f) <: t1
+        @test typeof(c) <: t1
         @test typeof(r) <: t2
         @test typeof(m) <: t2
 
         @test d == f
+        @test c == f + (m == 0 ? 0 : 1)
         @test r == m
         @test 0 <= r < y
         @test x == y*d + r
@@ -942,11 +983,13 @@ for yr = {
 
             sd = div(sx,sy)
             sf = fld(sx,sy)
+            sc = cld(sx,sy)
             sr = rem(sx,sy)
             sm = mod(sx,sy)
 
             @test typeof(sd) <: t1
             @test typeof(sf) <: t1
+            @test typeof(sc) <: t1
             @test typeof(sr) <: t2
             @test typeof(sm) <: t2
 
@@ -1046,6 +1089,50 @@ end
 @test fld(typemin(Int64)+3,-2) ==  4611686018427387902
 @test fld(typemin(Int64)+3,-7) ==  1317624576693539400
 
+@test cld(typemax(Int64)  , 1) ==  9223372036854775807
+@test cld(typemax(Int64)  , 2) ==  4611686018427387904
+@test cld(typemax(Int64)  , 7) ==  1317624576693539401
+@test cld(typemax(Int64)  ,-1) == -9223372036854775807
+@test cld(typemax(Int64)  ,-2) == -4611686018427387903
+@test cld(typemax(Int64)  ,-7) == -1317624576693539401
+@test cld(typemax(Int64)-1, 1) ==  9223372036854775806
+@test cld(typemax(Int64)-1, 2) ==  4611686018427387903
+@test cld(typemax(Int64)-1, 7) ==  1317624576693539401
+@test cld(typemax(Int64)-1,-1) == -9223372036854775806
+@test cld(typemax(Int64)-1,-2) == -4611686018427387903
+@test cld(typemax(Int64)-1,-7) == -1317624576693539400
+@test cld(typemax(Int64)-2, 1) ==  9223372036854775805
+@test cld(typemax(Int64)-2, 2) ==  4611686018427387903
+@test cld(typemax(Int64)-2, 7) ==  1317624576693539401
+@test cld(typemax(Int64)-2,-1) == -9223372036854775805
+@test cld(typemax(Int64)-2,-2) == -4611686018427387902
+@test cld(typemax(Int64)-2,-7) == -1317624576693539400
+
+@test cld(typemin(Int64)  , 1) == -9223372036854775807-1
+@test cld(typemin(Int64)  , 2) == -4611686018427387904
+@test cld(typemin(Int64)  , 7) == -1317624576693539401
+#@test cld(typemin(Int64)  ,-1) == -9223372036854775807-1 # FIXME!
+@test cld(typemin(Int64)  ,-2) ==  4611686018427387904
+@test cld(typemin(Int64)  ,-7) ==  1317624576693539402
+@test cld(typemin(Int64)+1, 1) == -9223372036854775807
+@test cld(typemin(Int64)+1, 2) == -4611686018427387903
+@test cld(typemin(Int64)+1, 7) == -1317624576693539401
+@test cld(typemin(Int64)+1,-1) ==  9223372036854775807
+@test cld(typemin(Int64)+1,-2) ==  4611686018427387904
+@test cld(typemin(Int64)+1,-7) ==  1317624576693539401
+@test cld(typemin(Int64)+2, 1) == -9223372036854775806
+@test cld(typemin(Int64)+2, 2) == -4611686018427387903
+@test cld(typemin(Int64)+2, 7) == -1317624576693539400
+@test cld(typemin(Int64)+2,-1) ==  9223372036854775806
+@test cld(typemin(Int64)+2,-2) ==  4611686018427387903
+@test cld(typemin(Int64)+2,-7) ==  1317624576693539401
+@test cld(typemin(Int64)+3, 1) == -9223372036854775805
+@test cld(typemin(Int64)+3, 2) == -4611686018427387902
+@test cld(typemin(Int64)+3, 7) == -1317624576693539400
+@test cld(typemin(Int64)+3,-1) ==  9223372036854775805
+@test cld(typemin(Int64)+3,-2) ==  4611686018427387903
+@test cld(typemin(Int64)+3,-7) ==  1317624576693539401
+
 for x={typemin(Int64), -typemax(Int64), -typemax(Int64)+1, -typemax(Int64)+2,
        typemax(Int64)-2, typemax(Int64)-1, typemax(Int64),
        typemax(Uint64)-1, typemax(Uint64)-2, typemax(Uint64)},
@@ -1053,10 +1140,12 @@ for x={typemin(Int64), -typemax(Int64), -typemax(Int64)+1, -typemax(Int64)+2,
     if x >= 0
         @test div(unsigned(x),y) == unsigned(div(x,y))
         @test fld(unsigned(x),y) == unsigned(fld(x,y))
+        @test cld(unsigned(x),y) == unsigned(cld(x,y))
     end
     if isa(x,Signed) && y >= 0
         @test div(x,unsigned(y)) == div(x,y)
         @test fld(x,unsigned(y)) == fld(x,y)
+        @test cld(x,unsigned(y)) == cld(x,y)
     end
 end
 
@@ -1072,6 +1161,12 @@ for x=0:5, y=1:5
     @test fld(x,uint(y)) == fld(x,y)
     @test fld(uint(x),-y) == uint(fld(x,-y))
     @test fld(-x,uint(y)) == fld(-x,y)
+
+    @test cld(uint(x),uint(y)) == cld(x,y)
+    @test cld(uint(x),y) == cld(x,y)
+    @test cld(x,uint(y)) == cld(x,y)
+    @test cld(uint(x),-y) == uint(cld(x,-y))
+    @test cld(-x,uint(y)) == cld(-x,y)
 
     @test rem(uint(x),uint(y)) == rem(x,y)
     @test rem(uint(x),y) == rem(x,y)
@@ -1130,6 +1225,28 @@ end
 @test signed(fld(typemax(Uint),typemin(Int)>>1))     == -4
 @test signed(fld(typemax(Uint),(typemin(Int)>>1)+1)) == -5
 
+@test cld(typemax(Uint64)  , 1) ==  typemax(Uint64)
+@test cld(typemax(Uint64)  ,-1) == -typemax(Uint64)
+@test cld(typemax(Uint64)-1, 1) ==  typemax(Uint64)-1
+@test cld(typemax(Uint64)-1,-1) == -typemax(Uint64)+1
+@test cld(typemax(Uint64)-2, 1) ==  typemax(Uint64)-2
+@test cld(typemax(Uint64)-2,-1) == -typemax(Uint64)+2
+
+@test signed(cld(unsigned(typemax(Int64))+2, 1)) ==  typemax(Int64)+2
+@test signed(cld(unsigned(typemax(Int64))+2,-1)) == -typemax(Int64)-2
+@test signed(cld(unsigned(typemax(Int64))+1, 1)) ==  typemax(Int64)+1
+@test signed(cld(unsigned(typemax(Int64))+1,-1)) == -typemax(Int64)-1
+@test signed(cld(unsigned(typemax(Int64))  , 1)) ==  typemax(Int64)
+@test signed(cld(unsigned(typemax(Int64))  ,-1)) == -typemax(Int64)
+
+@test signed(cld(typemax(Uint),typemax(Int)))        ==  3
+@test signed(cld(typemax(Uint),(typemax(Int)>>1)+1)) ==  4
+@test signed(cld(typemax(Uint),typemax(Int)>>1))     ==  5
+@test signed(cld(typemax(Uint),typemin(Int)))        == -1
+@test signed(cld(typemax(Uint),typemin(Int)+1))      == -2
+@test signed(cld(typemax(Uint),typemin(Int)>>1))     == -3
+@test signed(cld(typemax(Uint),(typemin(Int)>>1)+1)) == -4
+
 # issue #4156
 @test fld(1.4,0.35667494393873234) == 3.0
 @test div(1.4,0.35667494393873234) == 3.0
@@ -1165,6 +1282,7 @@ end
 
 @test div(1e50,1) == 1e50
 @test fld(1e50,1) == 1e50
+@test cld(1e50,1) == 1e50
 
 # rounding difficult values
 
@@ -1464,11 +1582,9 @@ approx_eq(a, b) = approx_eq(a, b, 1e-6)
 @test rationalize(Int16, 0.2264705884044309) == 77//340
 @test rationalize(Int16, 0.39999899264235683) == 2//5
 @test rationalize(Int16, 1.1264233500618559e-5) == 0//1
-@test rationalize(Uint16, 1.1264233500618559e-5) == 1//65535
 @test rationalize(Uint16, 0.6666652791223875) == 2//3
 @test rationalize(Int8, 0.9374813124660655) == 15//16
 @test rationalize(Int8, 0.003803032342443835) == 0//1
-@test rationalize(Uint8, 0.003803032342443835) == 1//255
 
 # issue 3412
 @test convert(Rational{Int32},0.5) === int32(1)//int32(2)
@@ -1490,6 +1606,31 @@ approx_eq(a, b) = approx_eq(a, b, 1e-6)
 @test convert(Rational{BigInt},realmax(Float64)) == realmax(Float64)
 
 @test isa(convert(Float64, big(1)//2), Float64)
+
+# issue 5935
+@test rationalize(Int64, nextfloat(0.1)) == 1//10
+@test rationalize(Int128,nextfloat(0.1)) == 1//10
+@test rationalize(BigInt,nextfloat(0.1)) == 1//10
+@test rationalize(BigInt,nextfloat(BigFloat("0.1"))) == 1//10
+@test rationalize(Int64, nextfloat(0.1),tol=0) == 379250494936463//3792504949364629
+@test rationalize(Int128,nextfloat(0.1),tol=0) == 379250494936463//3792504949364629
+@test rationalize(BigInt,nextfloat(0.1),tol=0) == 379250494936463//3792504949364629
+@test rationalize(BigInt,nextfloat(BigFloat("0.1")),tol=0) == 5449039493520762137579811059232372134271528690147791248915651012137088453645//54490394935207621375798110592323721342715286901477912489156510121370884536449
+
+@test rationalize(Int8, 200f0) == 1//0
+@test rationalize(Int8, -200f0) == -1//0
+
+@test [rationalize(1pi,tol=0.1^n) for n=1:10] == [
+             16//5
+             22//7
+            201//64
+            333//106
+            355//113
+            355//113
+          75948//24175
+         100798//32085
+         103993//33102
+         312689//99532 ]
 
 # primes
 

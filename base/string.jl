@@ -466,7 +466,7 @@ function rsearch(s::String, t::String, i::Integer=endof(s))
     end
 end
 
-contains(a::String, b::String) = searchindex(a,b)!=0
+contains(haystack::String, needle::String) = searchindex(haystack,needle)!=0
 
 in(::String, ::String) = error("use contains(x,y) for string containment")
 
@@ -541,21 +541,9 @@ strwidth(s::String) = (w=0; for c in s; w += charwidth(c); end; w)
 strwidth(s::ByteString) = int(ccall(:u8_strwidth, Csize_t, (Ptr{Uint8},), s.data))
 # TODO: implement and use u8_strnwidth that takes a length argument
 
-## libc character class predicates ##
-
 isascii(c::Char) = c < 0x80
 isascii(s::String) = all(isascii, s)
 isascii(s::ASCIIString) = true
-
-for name = ("alnum", "alpha", "cntrl", "digit", "graph",
-            "lower", "print", "punct", "space", "upper")
-    f = symbol(string("is",name))
-    @eval ($f)(c::Char) = bool(ccall($(string("isw",name)), Int32, (Cwchar_t,), c))
-    @eval $f(s::String) = all($f, s)
-end
-
-isblank(c::Char) = c==' ' || c=='\t'
-isblank(s::String) = all(isblank, s)
 
 ## generic string uses only endof and next ##
 
@@ -987,7 +975,7 @@ end
 function indentation(s::String)
     count = 0
     for c in s
-        if isblank(c)
+        if c == ' ' || c == '\t'
             count += blank_width(c)
         else
             return count, false
@@ -1005,7 +993,7 @@ function unindent(s::String, indent::Int)
     cut = 0
     while !done(s,i)
         c,i_ = next(s,i)
-        if cutting && isblank(c)
+        if cutting && (c == ' ' || c == '\t')
             a = i_
             cut += blank_width(c)
             if cut == indent
@@ -1032,7 +1020,7 @@ function triplequoted(args...)
     sx = { isa(arg,ByteString) ? arg : esc(arg) for arg in args }
 
     indent = 0
-    rlines = split(RevString(sx[end]), '\n', 2)
+    rlines = split(RevString(sx[end]), '\n'; limit=2)
     last_line = rlines[1]
     if length(rlines) > 1 && lstrip(last_line) == ""
         indent,_ = indentation(last_line)
@@ -1287,8 +1275,8 @@ cpad(s, n::Integer, p=" ") = rpad(lpad(s,div(n+strwidth(s),2),p),n,p)
 
 # splitter can be a Char, Vector{Char}, String, Regex, ...
 # any splitter that provides search(s::String, splitter)
-split{T<:SubString}(str::T, splitter, limit::Integer, keep_empty::Bool) = _split(str, splitter, limit, keep_empty, T[])
-split{T<:String}(str::T, splitter, limit::Integer, keep_empty::Bool) = _split(str, splitter, limit, keep_empty, SubString{T}[])
+split{T<:SubString}(str::T, splitter; limit::Integer=0, keep::Bool=true) = _split(str, splitter, limit, keep, T[])
+split{T<:String}(str::T, splitter; limit::Integer=0, keep::Bool=true) = _split(str, splitter, limit, keep, SubString{T}[])
 function _split{T<:String,U<:Array}(str::T, splitter, limit::Integer, keep_empty::Bool, strs::U)
     i = start(str)
     n = endof(str)
@@ -1310,17 +1298,13 @@ function _split{T<:String,U<:Array}(str::T, splitter, limit::Integer, keep_empty
     end
     return strs
 end
-split(s::String, spl, n::Integer) = split(s, spl, n, true)
-split(s::String, spl, keep::Bool) = split(s, spl, 0, keep)
-split(s::String, spl)             = split(s, spl, 0, true)
 
 # a bit oddball, but standard behavior in Perl, Ruby & Python:
 const _default_delims = [' ','\t','\n','\v','\f','\r']
-split(str::String)                = split(str, _default_delims, 0, false)
+split(str::String) = split(str, _default_delims; limit=0, keep=false)
 
-
-rsplit{T<:SubString}(str::T, splitter, limit::Integer, keep_empty::Bool) = _rsplit(str, splitter, limit, keep_empty, T[])
-rsplit{T<:String}(str::T, splitter, limit::Integer, keep_empty::Bool) = _rsplit(str, splitter, limit, keep_empty, SubString{T}[])
+rsplit{T<:SubString}(str::T, splitter; limit::Integer=0, keep::Bool=true) = _rsplit(str, splitter, limit, keep, T[])
+rsplit{T<:String}(str::T, splitter   ; limit::Integer=0, keep::Bool=true) = _rsplit(str, splitter, limit, keep, SubString{T}[])
 function _rsplit{T<:String,U<:Array}(str::T, splitter, limit::Integer, keep_empty::Bool, strs::U)
     i = start(str)
     n = endof(str)
@@ -1340,9 +1324,6 @@ function _rsplit{T<:String,U<:Array}(str::T, splitter, limit::Integer, keep_empt
     (keep_empty || (n > 0)) && unshift!(strs, SubString(str,1,n))
     return strs
 end
-rsplit(s::String, spl, n::Integer) = rsplit(s, spl, n, true)
-rsplit(s::String, spl, keep::Bool) = rsplit(s, spl, 0, keep)
-rsplit(s::String, spl)             = rsplit(s, spl, 0, true)
 #rsplit(str::String) = rsplit(str, _default_delims, 0, false)
 
 function replace(str::ByteString, pattern, repl::Function, limit::Integer)

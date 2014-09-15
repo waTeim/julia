@@ -1829,3 +1829,27 @@ end
 
 # issue #7582
 aₜ = "a variable using Unicode 6"
+
+immutable My8156{A, B}
+    a::A
+    b::B
+end
+let m = My8156(nothing, 1)
+    @test sizeof(m) == sizeof(1)
+    @test m.a === nothing
+    @test m.b === 1
+end
+
+# issue #8184
+immutable Foo8184
+    x::Nothing
+    y::Nothing
+    z::Float64
+end
+let f = Foo8184(nothing,nothing,1.0)
+    g(x) = x.z
+    @test g(f) === 1.0
+end
+
+# issue #8213
+@test map((x...)->x,(1,2),(3,4),(5,6)) === ((1,3,5),(2,4,6))

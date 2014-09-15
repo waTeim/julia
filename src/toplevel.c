@@ -60,6 +60,8 @@ jl_module_t *jl_new_main_module(void)
                   (jl_value_t*)jl_main_module);
     jl_current_task->current_module = jl_main_module;
 
+    jl_module_import(jl_main_module, jl_core_module, jl_symbol("eval"));
+
     return old_main;
 }
 
@@ -450,7 +452,8 @@ jl_value_t *jl_toplevel_eval_flex(jl_value_t *e, int fast)
     int ewc = 0;
     JL_GC_PUSH3(&thunk, &thk, &ex);
 
-    if (ex->head != body_sym && ex->head != thunk_sym) {
+    if (ex->head != body_sym && ex->head != thunk_sym && ex->head != return_sym &&
+        ex->head != method_sym) {
         // not yet expanded
         ex = (jl_expr_t*)jl_expand(e);
     }

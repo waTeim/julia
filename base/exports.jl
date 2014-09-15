@@ -7,6 +7,7 @@ export
     Operators,
     Pkg,
     Profile,
+    Dates,
     Sys,
     Test,
     BLAS,
@@ -118,6 +119,7 @@ export
     Cdouble,
     Cfloat,
     Cint,
+    Cintmax_t,
     Clong,
     Clonglong,
     Coff_t,
@@ -127,6 +129,7 @@ export
     Cssize_t,
     Cuchar,
     Cuint,
+    Cuintmax_t,
     Culong,
     Culonglong,
     Cushort,
@@ -297,6 +300,7 @@ export
     ceil,
     cis,
     clamp,
+    cld,
     cmp,
     combinations,
     complex,
@@ -822,12 +826,12 @@ export
     isalnum,
     isalpha,
     isascii,
-    isblank,
     iscntrl,
     isdigit,
     isgraph,
     islower,
     ismatch,
+    isnumber,
     isprint,
     ispunct,
     isspace,
@@ -1007,6 +1011,11 @@ export
     toc,
     toq,
 
+#dates
+    Date,
+    DateTime,
+    now,
+
 # errors
     assert,
     backtrace,
@@ -1166,7 +1175,8 @@ export
     write,
     writecsv,
     writedlm,
-    UdpSocket,
+    TCPSocket,
+    UDPSocket,
 
 # multiprocessing
     addprocs,
