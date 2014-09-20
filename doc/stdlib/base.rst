@@ -38,7 +38,7 @@ Getting Around
 
 .. function:: whos([Module,] [pattern::Regex])
 
-   Print information about global variables in a module, optionally restricted
+   Print information about exported global variables in a module, optionally restricted
    to those matching ``pattern``.
 
 .. function:: edit(file::String, [line])
@@ -3145,7 +3145,7 @@ Mathematical Functions
 
 .. function:: signbit(x)
 
-   Returns ``1`` if the value of the sign of ``x`` is negative, otherwise ``0``.
+   Returns ``true`` if the value of the sign of ``x`` is negative, otherwise ``false``.
 
 .. function:: flipsign(x, y)
 
@@ -3956,21 +3956,17 @@ Random number generation in Julia uses the `Mersenne Twister library <http://www
 
    Generate a random ``Float64`` array of the size specified by dims
 
-.. function:: rand(Int32|Uint32|Int64|Uint64|Int128|Uint128, [dims...])
+.. function:: rand(t::Type, [dims...])
 
-   Generate a random integer of the given type. Optionally, generate an array of random integers of the given type by specifying dims.
+   Generate a random number or array of random numbes of the given type.
 
 .. function:: rand(r, [dims...])
 
-   Generate a random integer in the range ``r`` (for example, ``1:n`` or ``0:2:10``). Optionally, generate a random integer array.
+   Pick a random element or array of random elements from range ``r`` (for example, ``1:n`` or ``0:2:10``).
 
 .. function:: randbool([dims...])
 
    Generate a random boolean value. Optionally, generate an array of random boolean values.
-
-.. function:: randbool!(A)
-
-   Fill an array with random boolean values. A may be an ``Array`` or a ``BitArray``.
 
 .. function:: randn([rng], dims or [dims...])
 
@@ -4044,11 +4040,19 @@ Constructors
    Construct an uninitialized cell array (heterogeneous array). ``dims`` can be either a tuple or a series of integer arguments.
 .. function:: zeros(type, dims)
 
-   Create an array of all zeros of specified type
+   Create an array of all zeros of specified type. The type defaults to Float64 if not specified.
+
+.. function:: zeros(A)
+
+   Create an array of all zeros with the same element type and shape as A.
 
 .. function:: ones(type, dims)
 
-   Create an array of all ones of specified type
+   Create an array of all ones of specified type. The type defaults to Float64 if not specified.
+
+.. function:: ones(A)
+
+   Create an array of all ones with the same element type and shape as A.
 
 .. function:: trues(dims)
 
@@ -4058,13 +4062,13 @@ Constructors
 
    Create a ``BitArray`` with all values set to false
 
-.. function:: fill(v, dims)
+.. function:: fill(x, dims)
 
-   Create an array filled with ``v``
+   Create an array filled with the value ``x``
 
 .. function:: fill!(A, x)
 
-   Fill array ``A`` with value ``x``
+   Fill the array ``A`` with the value ``x``
 
 .. function:: reshape(A, dims)
 

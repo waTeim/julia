@@ -30,7 +30,7 @@
 
 ("Base","whos","whos([Module,] [pattern::Regex])
 
-   Print information about global variables in a module, optionally
+   Print information about exported global variables in a module, optionally
    restricted to those matching \"pattern\".
 
 "),
@@ -4516,8 +4516,8 @@ popdisplay(d::Display)
 
 ("Base","signbit","signbit(x)
 
-   Returns \"1\" if the value of the sign of \"x\" is negative,
-   otherwise \"0\".
+   Returns \"true\" if the value of the sign of \"x\" is negative,
+   otherwise \"false\".
 
 "),
 
