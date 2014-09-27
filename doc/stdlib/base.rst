@@ -1158,7 +1158,7 @@ Dequeues
    are shifted down to fill the resulting gap. If specified, replacement values from
    an ordered collection will be spliced in place of the removed item.
 
-   To insert ``replacement`` before an index ``n`` without removing any items, use ``splice(collection, n-1:n, replacement)``.
+   To insert ``replacement`` before an index ``n`` without removing any items, use ``splice!(collection, n:n-1, replacement)``.
 
 .. function:: splice!(collection, range, [replacement]) -> items
 
@@ -1167,7 +1167,7 @@ Dequeues
    If specified, replacement values from an ordered collection will be spliced in place
    of the removed items.
 
-   To insert ``replacement`` before an index ``n`` without removing any items, use ``splice(collection, n-1:n, replacement)``.
+   To insert ``replacement`` before an index ``n`` without removing any items, use ``splice!(collection, n:n-1, replacement)``.
 
 .. function:: resize!(collection, n) -> collection
 
@@ -4676,8 +4676,11 @@ Statistics
 Signal Processing
 -----------------
 
-Fast Fourier transform (FFT) functions in Julia are largely implemented by
-calling functions from `FFTW <http://www.fftw.org>`_.
+Fast Fourier transform (FFT) functions in Julia are largely
+implemented by calling functions from `FFTW
+<http://www.fftw.org>`_. By default, Julia does not use multi-threaded
+FFTW. Higher performance may be obtained by experimenting with
+multi-threading. Use `FFTW.set_num_threads(np)` to use `np` threads.
 
 .. function:: fft(A [, dims])
 
@@ -4699,6 +4702,10 @@ calling functions from `FFTW <http://www.fftw.org>`_.
    
    A multidimensional FFT simply performs this operation along each transformed
    dimension of ``A``.
+
+   Higher performance is usually possible with multi-threading. Use
+   `FFTW.set_num_threads(np)` to use `np` threads, if you have `np`
+   processors.
 
 .. function:: fft!(A [, dims])
 
@@ -5037,12 +5044,12 @@ some built-in integration support in Julia.
 Parallel Computing
 ------------------
 
-.. function:: addprocs(n; cman::ClusterManager=LocalManager()) -> List of process identifiers
+.. function:: addprocs(n; manager::ClusterManager=LocalManager()) -> List of process identifiers
 
    ``addprocs(4)`` will add 4 processes on the local machine. This can be used to take 
    advantage of multiple cores.
    
-   Keyword argument ``cman`` can be used to provide a custom cluster manager to start workers. 
+   Keyword argument ``manager`` can be used to provide a custom cluster manager to start workers. 
    For example Beowulf clusters are  supported via a custom cluster manager implemented 
    in  package ``ClusterManagers``.
    

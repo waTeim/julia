@@ -256,8 +256,15 @@ endif
 	-rm -f $(DESTDIR)$(datarootdir)/julia/doc/juliadoc/.gitignore
 	# Copy in beautiful new man page!
 	$(INSTALL_F) $(build_datarootdir)/man/man1/julia.1 $(DESTDIR)$(datarootdir)/man/man1/
+	# Copy icon and .desktop file
+	mkdir -p $(DESTDIR)$(datarootdir)/icons/hicolor/scalable/apps/
+	$(INSTALL_F) contrib/julia.svg $(DESTDIR)$(datarootdir)/icons/hicolor/scalable/apps/
+	-touch --no-create $(DESTDIR)$(datarootdir)/icons/hicolor/
+	-gtk-update-icon-cache $(DESTDIR)$(datarootdir)/icons/hicolor/
+	mkdir -p $(DESTDIR)$(datarootdir)/applications/
+	$(INSTALL_F) contrib/julia.desktop $(DESTDIR)$(datarootdir)/applications/
 
-	# Update RPATH entries of Julia if $(private_libdir_rel) != $(build_private_libdir_rel)
+	# Update RPATH entries and JL_SYSTEM_IMAGE_PATH if $(private_libdir_rel) != $(build_private_libdir_rel)
 ifneq ($(private_libdir_rel),$(build_private_libdir_rel))
 ifeq ($(OS), Darwin)
 	for julia in $(DESTDIR)$(bindir)/julia* ; do \
@@ -269,12 +276,12 @@ else ifeq ($(OS), Linux)
 		patchelf --set-rpath '$$ORIGIN/$(private_libdir_rel):$$ORIGIN/$(libdir_rel)' $$julia; \
 	done
 endif
-endif
 
-	# Overwrite JL_SYSTEM_IMAGE_PATH in julia binaries:
+	# Overwrite JL_SYSTEM_IMAGE_PATH in julia binaries
 	for julia in $(DESTDIR)$(bindir)/julia* ; do \
 		$(call spawn,$(build_bindir)/stringreplace $$(strings -t x - $$julia | grep "sys.ji$$" | awk '{print $$1;}' ) "$(private_libdir_rel)/sys.ji" 256 $(call cygpath_w,$$julia)); \
 	done
+endif
 
 	mkdir -p $(DESTDIR)$(sysconfdir)
 	cp -R $(build_sysconfdir)/julia $(DESTDIR)$(sysconfdir)/
@@ -297,8 +304,8 @@ ifneq ($(DESTDIR),)
 endif
 	@$(MAKE) install
 	cp LICENSE.md $(prefix)
-ifeq ($(OS), Darwin)
-	-./contrib/mac/fixup-libgfortran.sh $(DESTDIR)$(private_libdir)
+ifneq ($(OS), WINNT)
+	-./contrib/fixup-libgfortran.sh $(DESTDIR)$(private_libdir)
 endif
 	# Copy in juliarc.jl files per-platform for binary distributions as well
 	# Note that we don't install to sysconfdir: we always install to $(DESTDIR)$(prefix)/etc.

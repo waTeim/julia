@@ -41,8 +41,10 @@ evaluate(f::Callable, x, y) = f(x, y)
 
 # r_promote: promote x to the type of reduce(op, [x])
 r_promote(op, x) = x
-r_promote(::AddFun, x) = x + zero(x)
-r_promote(::MulFun, x) = x * one(x)
+r_promote(::AddFun, x::Number) = x + zero(x)
+r_promote(::MulFun, x::Number) = x * one(x)
+r_promote(::AddFun, x) = x
+r_promote(::MulFun, x) = x
 
 
 ## foldl && mapfoldl
@@ -125,8 +127,8 @@ function mapreduce_pairwise_impl(f, op, A::AbstractArray, ifirst::Int, ilast::In
         return mapreduce_seq_impl(f, op, A, ifirst, ilast)
     else
         imid = (ifirst + ilast) >>> 1
-        v1 = mapreduce_seq_impl(f, op, A, ifirst, imid)
-        v2 = mapreduce_seq_impl(f, op, A, imid+1, ilast)
+        v1 = mapreduce_pairwise_impl(f, op, A, ifirst, imid, blksize)
+        v2 = mapreduce_pairwise_impl(f, op, A, imid+1, ilast, blksize)
         return evaluate(op, v1, v2)
     end
 end
@@ -190,38 +192,17 @@ reduce(op, a::Number) = a
 ## sum
 
 function mapreduce_seq_impl(f, op::AddFun, a::AbstractArray, ifirst::Int, ilast::Int)
-    @inbounds if ifirst + 6 >= ilast  # length(a) < 8
-        i = ifirst
-        s = evaluate(f, a[i]) + evaluate(f, a[i+1])
-        i = i+1
-        while i < ilast
-            s += evaluate(f, a[i+=1])
+    @inbounds begin
+        s = evaluate(f, a[ifirst]) + evaluate(f, a[ifirst+1])
+        @simd for i = ifirst+2:ilast
+            s += evaluate(f, a[i])
         end
-        return s
-
-    else # length(a) >= 8, manual unrolling
-        s1 = evaluate(f, a[ifirst]) + evaluate(f, a[ifirst + 4])
-        s2 = evaluate(f, a[ifirst + 1]) + evaluate(f, a[ifirst + 5])
-        s3 = evaluate(f, a[ifirst + 2]) + evaluate(f, a[ifirst + 6])
-        s4 = evaluate(f, a[ifirst + 3]) + evaluate(f, a[ifirst + 7])
-        i = ifirst + 8
-        il = ilast - 3
-        while i <= il
-            s1 += evaluate(f, a[i])
-            s2 += evaluate(f, a[i+1])
-            s3 += evaluate(f, a[i+2])
-            s4 += evaluate(f, a[i+3])
-            i += 4
-        end
-        while i <= ilast
-            s1 += evaluate(f, a[i])
-            i += 1
-        end
-        return s1 + s2 + s3 + s4
-    end    
+    end
+    s
 end
 
-# Note: sum_seq uses four accumulators, so each accumulator gets at most 256 numbers
+# Note: sum_seq usually uses four or more accumulators after partial
+# unrolling, so each accumulator gets at most 256 numbers
 sum_pairwise_blocksize(f) = 1024
 
 # This appears to show a benefit from a larger block size
@@ -240,10 +221,10 @@ sumabs2(a) = mapreduce(Abs2Fun(), AddFun(), a)
 # of a considerable increase in computational expense.
 function sum_kbn{T<:FloatingPoint}(A::AbstractArray{T})
     n = length(A)
+    c = r_promote(AddFun(), zero(T)::T)
     if n == 0
-        return sumzero(T)
+        return c
     end
-    c = zero(T)
     s = A[1] + c
     for i in 2:n
         @inbounds Ai = A[i]

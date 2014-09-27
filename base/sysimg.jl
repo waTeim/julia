@@ -49,8 +49,6 @@ include("rational.jl")
 
 # core data structures (used by type inference)
 include("abstractarray.jl")
-include("reduce.jl")
-
 include("subarray.jl")
 include("array.jl")
 include("bitarray.jl")
@@ -59,6 +57,12 @@ include("dict.jl")
 include("set.jl")
 include("hashing.jl")
 include("iterator.jl")
+
+# SIMD loops
+include("simdloop.jl")
+importall .SimdLoop
+
+include("reduce.jl")
 
 # compiler
 import Core.Undef  # used internally by compiler
@@ -205,10 +209,6 @@ using .I18n
 using .Help
 push!(I18n.CALLBACKS, Help.clear_cache)
 
-# SIMD loops
-include("simdloop.jl")
-importall .SimdLoop
-
 # frontend
 include("Terminals.jl")
 include("LineEdit.jl")
@@ -269,6 +269,9 @@ importall .Profile
 # dates
 include("Dates.jl")
 import .Dates: Date, DateTime, now
+
+# nullable types
+include("nullable.jl")
 
 function __init__()
     # Base library init

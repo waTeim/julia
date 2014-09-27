@@ -68,9 +68,7 @@ function show(io::IO, x::IntrinsicFunction)
 end
 
 function show(io::IO, x::UnionType)
-    if is(x,None)
-        print(io, "None")
-    elseif is(x,Top)
+    if is(x,Top)
         print(io, "Top")
     else
         print(io, "Union", x.types)
@@ -107,14 +105,13 @@ macro show(exs...)
 end
 
 show(io::IO, tn::TypeName) = print(io, tn.name)
-show(io::IO, ::Nothing) = print(io, "nothing")
+show(io::IO, ::Void) = print(io, "nothing")
 show(io::IO, b::Bool) = print(io, b ? "true" : "false")
 show(io::IO, n::Signed) = (write(io, dec(n)); nothing)
 show(io::IO, n::Unsigned) = print(io, "0x", hex(n,sizeof(n)<<1))
 print(io::IO, n::Unsigned) = print(io, dec(n))
 
-show{T}(io::IO, p::Ptr{T}) =
-    print(io, is(T,None) ? "Ptr{Void}" : typeof(p), " @0x$(hex(unsigned(p), WORD_SIZE>>2))")
+show{T}(io::IO, p::Ptr{T}) = print(io, typeof(p), " @0x$(hex(unsigned(p), WORD_SIZE>>2))")
 
 function show(io::IO, m::Module)
     if is(m,Main)
@@ -197,12 +194,6 @@ show_comma_array(io::IO, itr, o, c) = show_delim_array(io, itr, o, ',', c, false
 show(io::IO, t::Tuple) = show_delim_array(io, t, '(', ',', ')', true)
 
 show(io::IO, s::Symbol) = show_unquoted(io, QuoteNode(s))
-show(io::IO, tn::TypeName) = print(io, tn.name)
-show(io::IO, ::Nothing) = print(io, "nothing")
-show(io::IO, b::Bool) = print(io, b ? "true" : "false")
-show(io::IO, n::Signed) = (write(io, dec(n)); nothing)
-show(io::IO, n::Unsigned) = print(io, "0x", hex(n,sizeof(n)<<1))
-print(io::IO, n::Unsigned) = print(io, dec(n))
 
 ## Abstract Syntax Tree (AST) printing ##
 
@@ -308,7 +299,7 @@ function show_block(io::IO, head, args::Vector, body, indent::Int)
     print(io, head, ' ')
     show_list(io, args, ", ", indent)
 
-    ind = is(head, :module) ? indent : indent + indent_width
+    ind = is(head, :module) || is(head, :baremodule) ? indent : indent + indent_width
     exs = (is_expr(body, :block) || is_expr(body, :body)) ? body.args : {body}
     for ex in exs
         if !is_linenumber(ex); print(io, '\n', " "^ind); end
@@ -523,8 +514,11 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int)
         print(io, "end")
 
     # block with argument
-    elseif head in (:for,:while,:function,:if,:module) && nargs==2
+    elseif head in (:for,:while,:function,:if) && nargs==2
         show_block(io, head, args[1], args[2], indent); print(io, "end")
+
+    elseif is(head, :module) && nargs==3 && isa(args[1],Bool)
+        show_block(io, args[1] ? :module : :baremodule, args[2], args[3], indent); print(io, "end")
 
     # type declaration
     elseif is(head, :type) && nargs==3
@@ -547,7 +541,7 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int)
         print(io, "...")
 
     elseif (nargs == 1 && head in (:return, :abstract, :const)) ||
-                          head in (:local,  :global)
+                          head in (:local,  :global, :export)
         print(io, head, ' ')
         show_list(io, args, ", ", indent)
 
@@ -622,6 +616,21 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int)
     elseif is(head, symbol('\'')) && length(args) == 1
         show_unquoted(io, args[1])
         print(io, '\'')
+
+    elseif is(head, :import) || is(head, :importall) || is(head, :using)
+        print(io, head)
+        first = true
+        for a = args
+            if first
+                print(io, ' ')
+                first = false
+            else
+                print(io, '.')
+            end
+            if !is(a, :.)
+                print(io, a)
+            end
+        end
 
     # print anything else as "Expr(head, args...)"
     else

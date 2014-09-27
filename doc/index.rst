@@ -46,6 +46,7 @@
    manual/style-guide
    manual/faq
    manual/noteworthy-differences
+   manual/unicode-input
 
 .. _stdlib:
 
@@ -80,3 +81,4 @@ Developer Documentation
    :maxdepth: 1
 
    devdocs/cartesian
+   devdocs/meta
