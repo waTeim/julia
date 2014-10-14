@@ -9,8 +9,6 @@ include $(JULIAHOME)/Make.inc
 # so that prefix/share/julia/VERSDIR can be overwritten without touching
 # third-party code).
 VERSDIR = v`cut -d. -f1-2 < VERSION`
-INSTALL_F = contrib/install.sh 644
-INSTALL_M = contrib/install.sh 755
 
 #file name of make dist result
 ifeq ($(JULIA_DIST_TARNAME),)
@@ -18,7 +16,11 @@ ifeq ($(JULIA_DIST_TARNAME),)
 endif
 
 all: default
+ifeq ($(JULIA_DEBUG), 1)
+default: debug
+else
 default: release
+endif
 
 # sort is used to remove potential duplicates
 DIRS = $(sort $(build_bindir) $(build_libdir) $(build_private_libdir) $(build_libexecdir) $(build_sysconfdir)/julia $(build_datarootdir)/julia $(build_datarootdir)/man/man1)
@@ -111,13 +113,18 @@ endif
 # use sys.ji if it exists, otherwise run two stages
 $(build_private_libdir)/sys%ji: $(build_private_libdir)/sys%o
 
-.PRECIOUS: $(build_private_libdir)/sys%o
+.SECONDARY: $(build_private_libdir)/sys.o
+.SECONDARY: $(build_private_libdir)/sys0.o
 
 $(build_private_libdir)/sys%$(SHLIB_EXT): $(build_private_libdir)/sys%o
+ifneq ($(USEMSVC), 1)
 	$(CXX) -shared -fPIC -L$(build_private_libdir) -L$(build_libdir) -L$(build_shlibdir) -o $@ $< \
-		$$([ $(OS) = Darwin ] && echo -Wl,-undefined,dynamic_lookup || echo -Wl,--unresolved-symbols,ignore-all ) \
-		$$([ $(OS) = WINNT ] && echo -ljulia -lssp)
+		$$([ $(OS) = Darwin ] && echo '' -Wl,-undefined,dynamic_lookup || echo '' -Wl,--unresolved-symbols,ignore-all ) \
+		$$([ $(OS) = WINNT ] && echo '' -ljulia -lssp)
 	$(DSYMUTIL) $@
+else
+	@true
+endif
 
 $(build_private_libdir)/sys0.o:
 	@$(QUIET_JULIA) cd base && \
@@ -129,7 +136,7 @@ $(build_private_libdir)/sys.o: VERSION $(BASE_SRCS) $(build_datarootdir)/julia/h
 	@$(QUIET_JULIA) cd base && \
 	$(call spawn,$(JULIA_EXECUTABLE)) --build $(call cygpath_w,$(build_private_libdir)/sys) \
 		-J$(call cygpath_w,$(build_private_libdir))/$$([ -e $(build_private_libdir)/sys.ji ] && echo sys.ji || echo sys0.ji) -f sysimg.jl \
-		|| (echo "*** This error is usually fixed by running 'make clean'. If the error persists, try 'make cleanall'. ***" && false)
+		|| { echo "*** This error is usually fixed by running 'make clean'. If the error persists, try 'make cleanall'. ***" && false; }
 
 run-julia-debug run-julia-release: run-julia-%:
 	$(MAKE) $(QUIET_MAKE) run-julia JULIA_EXECUTABLE="$(JULIA_EXECUTABLE_$*)"
@@ -138,7 +145,7 @@ run-julia:
 run:
 	@$(call spawn,$(cmd))
 
-$(build_bindir)/stringreplace: $(build_bindir) contrib/stringreplace.c
+$(build_bindir)/stringreplace: contrib/stringreplace.c | $(build_bindir)
 	@$(call PRINT_CC, $(CC) -o $(build_bindir)/stringreplace contrib/stringreplace.c)
 
 
@@ -263,6 +270,9 @@ endif
 	-gtk-update-icon-cache $(DESTDIR)$(datarootdir)/icons/hicolor/
 	mkdir -p $(DESTDIR)$(datarootdir)/applications/
 	$(INSTALL_F) contrib/julia.desktop $(DESTDIR)$(datarootdir)/applications/
+	# Install appdata file
+	mkdir -p $(DESTDIR)$(datarootdir)/appdata/
+	$(INSTALL_F) contrib/julia.appdata.xml $(DESTDIR)$(datarootdir)/appdata/
 
 	# Update RPATH entries and JL_SYSTEM_IMAGE_PATH if $(private_libdir_rel) != $(build_private_libdir_rel)
 ifneq ($(private_libdir_rel),$(build_private_libdir_rel))

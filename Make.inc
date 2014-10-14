@@ -108,6 +108,9 @@ private_libdir_rel = $(shell $(JULIAHOME)/contrib/relative_path.sh $(bindir) $(p
 datarootdir_rel = $(shell $(JULIAHOME)/contrib/relative_path.sh $(bindir) $(datarootdir))
 sysconfdir_rel = $(shell $(JULIAHOME)/contrib/relative_path.sh $(bindir) $(sysconfdir))
 
+INSTALL_F = $(JULIAHOME)/contrib/install.sh 644
+INSTALL_M = $(JULIAHOME)/contrib/install.sh 755
+
 # This used for debian packaging, to conform to library layout guidelines
 ifeq ($(MULTIARCH_INSTALL), 1)
 MULTIARCH = $(shell gcc -print-multiarch)
@@ -296,6 +299,19 @@ JCPPFLAGS =
 JCXXFLAGS = -pipe $(fPIC) -fno-rtti
 DEBUGFLAGS = -O0 -g -DJL_DEBUG_BUILD -fstack-protector-all
 SHIPFLAGS = -O3 -g -falign-functions
+endif
+
+ifeq ($(USECCACHE), 1)
+CC := ccache $(CC)
+CXX := ccache $(CXX)
+ifeq ($(USECLANG),1)
+# ccache and Clang don't do well together
+# http://petereisentraut.blogspot.be/2011/05/ccache-and-clang.html
+CC += -Qunused-arguments -fcolor-diagnostics
+CXX += -Qunused-arguments -fcolor-diagnostics
+# http://petereisentraut.blogspot.be/2011/09/ccache-and-clang-part-2.html
+export CCACHE_CPP2 := yes
+endif
 endif
 
 ifeq ($(LLVM_VER),svn)
@@ -634,7 +650,7 @@ JLDFLAGS += -Wl,--large-address-aware
 endif
 else
 OSLIBS += kernel32.lib ws2_32.lib psapi.lib advapi32.lib iphlpapi.lib shell32.lib winmm.lib
-JLDFLAGS =
+JLDFLAGS = -stack:8388608
 endif
 JCPPFLAGS += -D_WIN32_WINNT=0x0600
 UNTRUSTED_SYSTEM_LIBM = 1

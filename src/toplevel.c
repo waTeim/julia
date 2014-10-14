@@ -549,8 +549,13 @@ jl_value_t *jl_parse_eval_all(char *fname)
         fn = jl_pchar_to_string(fname, strlen(fname));
         ln = jl_box_long(jl_lineno);
         jl_lineno = last_lineno;
-        jl_rethrow_other(jl_new_struct(jl_loaderror_type, fn, ln,
-                                       jl_exception_in_transit));
+        if (jl_loaderror_type == NULL) {
+            jl_rethrow();
+        }
+        else {
+            jl_rethrow_other(jl_new_struct(jl_loaderror_type, fn, ln,
+                                           jl_exception_in_transit));
+        }
     }
     jl_stop_parsing();
     jl_lineno = last_lineno;
@@ -564,7 +569,7 @@ jl_value_t *jl_load(const char *fname)
         //This deliberatly uses ios, because stdio initialization has been moved to Julia
         jl_printf(JL_STDOUT, "%s\r\n", fname);
 #ifdef _OS_WINDOWS_        
-        uv_run(uv_default_loop(), 1);
+        uv_run(uv_default_loop(), (uv_run_mode)1);
 #endif
     }
     char *fpath = (char*)fname;

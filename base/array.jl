@@ -125,7 +125,7 @@ end
 
 getindex(T::(Type...)) = Array(T,0)
 
-# T[a:b] and T[a:s:b] also contruct typed ranges
+# T[a:b] and T[a:s:b] also construct typed ranges
 function getindex{T<:Number}(::Type{T}, r::Range)
     copy!(Array(T,length(r)), r)
 end
@@ -446,13 +446,7 @@ end
 
 ## Dequeue functionality ##
 
-const _grow_none_errmsg =
-    "[] cannot grow. Instead, initialize the array with \"T[]\", where T is the desired element type."
-
 function push!{T}(a::Array{T,1}, item)
-    if is(T,Bottom)
-        error(_grow_none_errmsg)
-    end
     # convert first so we don't grow the array if the assignment won't work
     item = convert(T, item)
     ccall(:jl_array_grow_end, Void, (Any, Uint), a, 1)
@@ -467,9 +461,6 @@ function push!(a::Array{Any,1}, item::ANY)
 end
 
 function append!{T}(a::Array{T,1}, items::AbstractVector)
-    if is(T,Bottom)
-        error(_grow_none_errmsg)
-    end
     n = length(items)
     ccall(:jl_array_grow_end, Void, (Any, Uint), a, n)
     copy!(a, length(a)-n+1, items, 1, n)
@@ -477,9 +468,6 @@ function append!{T}(a::Array{T,1}, items::AbstractVector)
 end
 
 function prepend!{T}(a::Array{T,1}, items::AbstractVector)
-    if is(T,Bottom)
-        error(_grow_none_errmsg)
-    end
     n = length(items)
     ccall(:jl_array_grow_beg, Void, (Any, Uint), a, n)
     if a === items
@@ -518,9 +506,6 @@ function pop!(a::Vector)
 end
 
 function unshift!{T}(a::Array{T,1}, item)
-    if is(T,Bottom)
-        error(_grow_none_errmsg)
-    end
     item = convert(T, item)
     ccall(:jl_array_grow_beg, Void, (Any, Uint), a, 1)
     a[1] = item
@@ -1163,7 +1148,7 @@ indmin(a) = findmin(a)[2]
 # similar to Matlab's ismember
 # returns a vector containing the highest index in b for each value in a that is a member of b
 function indexin(a::AbstractArray, b::AbstractArray)
-    bdict = Dict(b, 1:length(b))
+    bdict = Dict(zip(b, 1:length(b)))
     [get(bdict, i, 0) for i in a]
 end
 
