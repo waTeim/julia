@@ -108,7 +108,7 @@ eval(Sys, :(@deprecate shlib_list dllist))
 @deprecate put      put!
 @deprecate take     take!
 
-@deprecate Set(a, b...) Set({a, b...})
+@deprecate Set(a, b...) Set(Any[a, b...])
 # for a bit of backwards compatibility
 IntSet(xs::Integer...) = (s=IntSet(); for a in xs; push!(s,a); end; s)
 Set{T<:Number}(xs::T...) = Set{T}(xs)
@@ -157,7 +157,7 @@ end
 
 scale!{T<:Base.LinAlg.BlasReal}(X::Array{T}, s::Complex) = error("scale!: Cannot scale a real array by a complex value in-place.  Use scale(X::Array{Real}, s::Complex) instead.")
 
-@deprecate which(f::Callable, args...) @which f(args...)
+@deprecate which(f, args...) @which f(args...)
 @deprecate rmdir rm
 
 # 0.4 deprecations
@@ -185,3 +185,28 @@ const Nothing = Void
 
 export None
 const None = Union()
+
+export apply
+function apply(f, args...)
+    depwarn("apply(f, x) is deprecated, use `f(x...)` instead", :apply)
+    return Core._apply(call, f, args...)
+end
+
+@deprecate median(v::AbstractArray; checknan::Bool=true)  median(v)
+@deprecate median(v::AbstractArray, region; checknan::Bool=true)  median(v, region)
+@deprecate median!(v::AbstractVector; checknan::Bool=true)  median!(v)
+
+@deprecate Dict{K,V}(ks::AbstractArray{K}, vs::AbstractArray{V}) Dict{K,V}(zip(ks, vs))
+@deprecate Dict{K,V}(ks::(K...), vs::(V...))                     Dict{K,V}(zip(ks, vs))
+@deprecate Dict{K}(ks::(K...), vs::Tuple)                        Dict{K,Any}(zip(ks, vs))
+@deprecate Dict{V}(ks::Tuple, vs::(V...))                        Dict{Any,V}(zip(ks, vs))
+@deprecate Dict(ks, vs)                                          Dict{Any,Any}(zip(ks, vs))
+
+@deprecate itrunc{T<:Integer}(::Type{T}, n::Integer) (n % T)
+
+@deprecate oftype{T}(::Type{T},c)  convert(T,c)
+
+@deprecate inf(x::FloatingPoint)  oftype(x,Inf)
+@deprecate nan(x::FloatingPoint)  oftype(x,NaN)
+@deprecate inf{T<:FloatingPoint}(::Type{T})  convert(T,Inf)
+@deprecate nan{T<:FloatingPoint}(::Type{T})  convert(T,NaN)

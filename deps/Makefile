@@ -19,11 +19,12 @@ CONFIGURE_COMMON += F77="$(FC)" CC="$(CC)" CXX="$(CXX)"
 MAKE_COMMON = DESTDIR="" prefix=$(build_prefix) bindir=$(build_bindir) libdir=$(build_libdir) libexecdir=$(build_libexecdir) datarootdir=$(build_datarootdir) includedir=$(build_includedir) sysconfdir=$(build_sysconfdir)
 
 #autoconf configure-driven scripts: llvm pcre arpack fftw unwind gmp mpfr patchelf uv
-#custom Makefile rules: openlibm Rmath dsfmt suitesparse-wrapper suitesparse lapack openblas mojibake
+#custom Makefile rules: openlibm Rmath dsfmt suitesparse-wrapper suitesparse lapack openblas mojibake objconv
 
 # prevent installing libs into usr/lib64 on opensuse
 unexport CONFIG_SITE
 
+STAGE1_DEPS =
 STAGE2_DEPS = Rmath
 STAGE3_DEPS = suitesparse-wrapper
 
@@ -76,6 +77,11 @@ endif
 
 ifeq ($(USE_SYSTEM_BLAS), 0)
 STAGE1_DEPS += openblas
+ifeq ($(USE_BLAS64), 1)
+ifeq ($(OS), Darwin)
+STAGE1_DEPS += objconv
+endif
+endif
 endif
 
 ifeq ($(USE_SYSTEM_FFTW), 0)
@@ -139,7 +145,7 @@ install: $(addprefix install-, $(DEP_LIBS))
 cleanall: $(addprefix clean-, $(DEP_LIBS))
 distcleanall: $(addprefix distclean-, $(DEP_LIBS))
 	rm -rf $(build_prefix)
-getall: get-llvm get-uv get-pcre get-openlibm get-openspecfun get-dsfmt get-Rmath get-openblas get-lapack get-fftw get-suitesparse get-arpack get-unwind get-osxunwind get-gmp get-mpfr get-patchelf get-mojibake
+getall: get-llvm get-uv get-pcre get-openlibm get-openspecfun get-dsfmt get-Rmath get-openblas get-lapack get-fftw get-suitesparse get-arpack get-unwind get-osxunwind get-gmp get-mpfr get-patchelf get-mojibake get-virtualenv get-objconv
 
 ## PATHS ##
 # sort is used to remove potential duplicates
@@ -176,7 +182,7 @@ ifeq ($(LLVM_SANITIZE),1)
 LLVM_BUILDTYPE := $(LLVM_BUILDTYPE)+Sanitize
 endif
 
-LLVM_LIB_FILE = libLLVMJIT.a
+LLVM_LIB_FILE = libLLVMCodeGen.a
 LLVM_OBJ_SOURCE = llvm-$(LLVM_VER)/build_$(LLVM_BUILDTYPE)/$(LLVM_FLAVOR)/lib/$(LLVM_LIB_FILE)
 LLVM_OBJ_TARGET = $(build_libdir)/$(LLVM_LIB_FILE)
 
@@ -328,7 +334,7 @@ llvm-$(LLVM_VER)/python2_path:
 	ln -sf /usr/bin/python2 "llvm-$(LLVM_VER)/python2_path/python"
 llvm_python_workaround=llvm-$(LLVM_VER)/python2_path
 else
-  LLVM_FLAGS += --with-python="$(shell ./find_python_for_llvm)"
+  LLVM_FLAGS += --with-python="$(shell ./find_python2)"
 endif
 
 ifeq ($(BUILD_CUSTOM_LIBCXX),1)
@@ -517,6 +523,7 @@ install-llvm: $(LLVM_OBJ_TARGET)
 
 UV_SRC_TARGET = libuv/.libs/libuv.a
 UV_OBJ_TARGET = $(build_libdir)/libuv.a
+
 UV_CFLAGS = 
 ifeq ($(USEMSVC), 1)
 UV_CFLAGS += -DBUILDING_UV_SHARED
@@ -525,9 +532,14 @@ ifeq ($(USEICC), 1)
 UV_CFLAGS += -static-intel
 endif
 
-UV_OPTS += LDFLAGS="$(LDFLAGS) $(CLDFLAGS) -v"
+UV_MFLAGS += LDFLAGS="$(LDFLAGS) $(CLDFLAGS) -v"
 ifneq ($(UV_CFLAGS),)
-UV_OPTS += CFLAGS="$(UV_CFLAGS)"
+UV_MFLAGS += CFLAGS="$(UV_CFLAGS)"
+endif
+ifneq ($(USEMSVC), 1)
+UV_FLAGS = $(UV_MFLAGS)
+else
+UV_FLAGS = --disable-shared $(UV_MFLAGS)
 endif
 
 libuv/configure:
@@ -540,14 +552,14 @@ libuv/config.status: $(JULIAHOME)/.git/modules/deps/libuv/HEAD
 endif
 libuv/config.status: libuv/configure
 	cd libuv && \
-	./configure --with-pic $(CONFIGURE_COMMON) $(UV_OPTS)
+	./configure --with-pic $(CONFIGURE_COMMON) $(UV_FLAGS)
 	touch -c $@
 $(UV_SRC_TARGET): libuv/config.status
 	touch -c libuv/aclocal.m4
 	touch -c libuv/Makefile.in
 	touch -c libuv/configure
 	touch -c libuv/config.status
-	$(MAKE) -C libuv $(UV_OPTS)
+	$(MAKE) -C libuv $(UV_MFLAGS)
 	touch -c $@
 libuv/checked: $(UV_SRC_TARGET)
 ifeq ($(OS),$(BUILD_OS))
@@ -781,6 +793,34 @@ check-Rmath: compile-Rmath
 install-Rmath: $(RMATH_OBJ_TARGET) 
 
 
+## objconv ##
+
+OBJCONV_SOURCE = objconv/objconv
+OBJCONV_TARGET = $(build_bindir)/objconv
+
+objconv.zip:
+	$(JLDOWNLOAD) $@ http://www.agner.org/optimize/objconv.zip
+objconv/config.status: objconv.zip
+	unzip -d objconv $<
+	cd objconv && unzip source.zip
+	echo 1 > $@
+$(OBJCONV_SOURCE): objconv/config.status
+	cd objconv && $(CXX) -o objconv -O2 *.cpp
+$(OBJCONV_TARGET): $(OBJCONV_SOURCE) | $(build_bindir)
+	cp -f $< $@
+
+clean-objconv:
+	-rm -f $(OBJCONV_TARGET)
+distclean-objconv:
+	-rm -rf objconv.zip objconv
+
+get-objconv: objconv.zip
+configure-objconv: objconv/config.status
+compile-objconv: $(OBJCONV_SOURCE)
+check-objconv: compile-objconv
+install-objconv: $(OBJCONV_TARGET)
+
+
 ## OpenBLAS ##
 # LAPACK is built into OpenBLAS by default
 
@@ -822,7 +862,11 @@ endif
 
 # 64-bit BLAS interface
 ifeq ($(USE_BLAS64), 1)
-OPENBLAS_BUILD_OPTS += INTERFACE64=1
+OPENBLAS_BUILD_OPTS += INTERFACE64=1 SYMBOLSUFFIX="64_"
+ifeq ($(OS), Darwin)
+OPENBLAS_BUILD_OPTS += OBJCONV=$(JULIAHOME)/deps/objconv/objconv
+$(OPENBLAS_OBJ_SOURCE): $(OBJCONV_SOURCE)
+endif
 endif
 
 # Decide whether to build for 32-bit or 64-bit arch
@@ -857,6 +901,7 @@ endif
 	mkdir -p openblas-$(OPENBLAS_VER) && \
 	$(TAR) -C openblas-$(OPENBLAS_VER) --strip-components 1 -xf $<
 	perl -i -ple 's/^\s*(EXTRALIB\s*\+=\s*-lSystemStubs)\s*$$/# $$1/g' openblas-$(OPENBLAS_VER)/Makefile.system
+	cd openblas-$(OPENBLAS_VER) && patch -p1 < ../openblas-symbol-rename.patch
 	echo 1 > $@
 $(OPENBLAS_OBJ_SOURCE): openblas-$(OPENBLAS_VER)/config.status
 	$(MAKE) -C openblas-$(OPENBLAS_VER) $(OPENBLAS_BUILD_OPTS) || (echo "*** Clean the OpenBLAS build with 'make -C deps clean-openblas'. Rebuild with 'make OPENBLAS_USE_THREAD=0 if OpenBLAS had trouble linking libpthread.so, and with 'make OPENBLAS_TARGET_ARCH=NEHALEM' if there were errors building SandyBridge support. Both these options can also be used simultaneously. ***" && false)
@@ -1019,12 +1064,28 @@ install-lapack: $(LAPACK_OBJ_TARGET)
 
 ## ARPACK ##
 ARPACK_FFLAGS = $(GFORTBLAS_FFLAGS)
+ARPACK_CFLAGS =
 
 ifeq ($(USE_BLAS64), 1)
 ifeq ($(USEIFC),1)
 ARPACK_FFLAGS += -i8
 else
 ARPACK_FFLAGS += -fdefault-integer-8
+ifeq ($(USE_SYSTEM_BLAS), 0)
+ifneq ($(USE_INTEL_MKL), 1)
+ARPACK_FFLAGS += -cpp -ffixed-line-length-none
+ARPACK_OPENBLASFCNS1 = axpy copy gemv geqr2 lacpy lahqr lanhs larnv lartg lascl laset scal trevc trmm trsen
+ARPACK_OPENBLASFCNS2 = dot ger labad laev2 lamch lanst lanv2 lapy2 larf larfg lasr nrm2 orm2r rot steqr swap
+ARPACK_OPENBLASFCNS3 = dotc geru unm2r
+ARPACK_OPENBLASFCNS4 = COPY LABAD LAMCH LANHS LANV2 LARFG ROT
+ARPACK_FFLAGS += $(foreach fcn, $(ARPACK_OPENBLASFCNS1) $(ARPACK_OPENBLASFCNS2), -Ds$(fcn)=s$(fcn)_64 -Dd$(fcn)=d$(fcn)_64)
+ARPACK_FFLAGS += $(foreach fcn, $(ARPACK_OPENBLASFCNS1) $(ARPACK_OPENBLASFCNS3), -Dc$(fcn)=c$(fcn)_64 -Dz$(fcn)=z$(fcn)_64)
+ARPACK_FFLAGS += $(foreach fcn, $(ARPACK_OPENBLASFCNS4), -DS$(fcn)=S$(fcn)_64 -DD$(fcn)=D$(fcn)_64)
+ARPACK_FFLAGS += -Dscnrm2=scnrm2_64 -Ddznrm2=dznrm2_64 -Dcsscal=csscal_64 -Dzdscal=zdscal_64
+# CFLAGS are for the configure checks
+ARPACK_CFLAGS += -Dsgemm_=sgemm_64_ -Dcheev_=cheev_64_
+endif
+endif
 endif
 endif
 
@@ -1037,18 +1098,19 @@ ARPACK_OBJ_TARGET = $(build_shlibdir)/libarpack.$(SHLIB_EXT)
 
 ARPACK_MFLAGS = F77="$(FC)" MPIF77="$(FC)"
 ARPACK_FFLAGS += $(FFLAGS) $(JFFLAGS)
-ARPACK_FLAGS = --with-blas="$(LIBBLAS)" --with-lapack="$(LIBLAPACK)" --disable-mpi --enable-shared FFLAGS="$(ARPACK_FFLAGS)"
+ARPACK_FLAGS = --with-blas="$(LIBBLAS)" --with-lapack="$(LIBLAPACK)" --disable-mpi --enable-shared FFLAGS="$(ARPACK_FFLAGS)" CFLAGS="$(ARPACK_CFLAGS)"
 ifneq ($(OS),WINNT)
 ARPACK_FLAGS += LDFLAGS="$(LDFLAGS) -Wl,-rpath,'$(build_libdir)'"
 endif
 
 # ARPACK-NG upstream keeps changing their download filenames
-arpack-ng_$(ARPACK_VER).tar.gz:
-	$(JLDOWNLOAD) $@ http://forge.scilab.org/index.php/p/arpack-ng/downloads/get/$@
+arpack-ng-$(ARPACK_VER).tar.gz:
+	$(JLDOWNLOAD) $@ https://github.com/opencollab/arpack-ng/archive/$(ARPACK_VER).tar.gz
 	touch -c $@
-arpack-ng-$(ARPACK_VER)/configure: arpack-ng_$(ARPACK_VER).tar.gz
+arpack-ng-$(ARPACK_VER)/configure: arpack-ng-$(ARPACK_VER).tar.gz
 	$(JLCHECKSUM) $<
 	$(TAR) zxf $<
+	( cd arpack-ng-$(ARPACK_VER) && patch -p1 < ../arpack.xlahqr2.patch )
 	touch -c $@
 
 ifeq ($(USE_ATLAS), 1)
@@ -1092,9 +1154,9 @@ clean-arpack:
 	-$(MAKE) -C arpack-ng-$(ARPACK_VER) clean
 	-rm -f $(ARPACK_OBJ_SOURCE) $(ARPACK_OBJ_TARGET)
 distclean-arpack:
-	-rm -rf arpack-ng_$(ARPACK_VER).tar.gz arpack-ng-$(ARPACK_VER)
+	-rm -rf arpack-ng-$(ARPACK_VER).tar.gz arpack-ng-$(ARPACK_VER)
 
-get-arpack: arpack-ng_$(ARPACK_VER).tar.gz
+get-arpack: arpack-ng-$(ARPACK_VER).tar.gz
 configure-arpack: arpack-ng-$(ARPACK_VER)/config.status
 compile-arpack: $(ARPACK_OBJ_SOURCE)
 check-arpack: arpack-ng-$(ARPACK_VER)/checked
@@ -1248,7 +1310,7 @@ ifeq (exists, $(shell [ -d $(JULIAHOME)/.git/modules/deps/libmojibake ] && echo 
 $(MOJIBAKE_SRC_TARGET): $(JULIAHOME)/.git/modules/deps/libmojibake/HEAD
 endif
 $(MOJIBAKE_SRC_TARGET): libmojibake/Makefile
-	$(MAKE) -C libmojibake cc="$(CC) -O2 -std=c99 $(fPIC)" AR="$(AR)" libmojibake.a
+	$(MAKE) -C libmojibake cc="$(CC) -O2 -std=c99 $(fPIC) -DMOJIBAKE_EXPORTS" AR="$(AR)" libmojibake.a
 	touch -c $@
 libmojibake/checked: $(MOJIBAKE_SRC_TARGET)
 ifeq ($(OS),$(BUILD_OS))
@@ -1279,8 +1341,16 @@ SUITESPARSE_OBJ_SOURCE = SuiteSparse-$(SUITESPARSE_VER)/UMFPACK/Lib/libumfpack.a
 SUITESPARSE_OBJ_TARGET = $(build_shlibdir)/libspqr.$(SHLIB_EXT)
 
 ifeq ($(USE_BLAS64), 1)
-UMFPACK_CONFIG = -DLONGBLAS='long long' 
-CHOLMOD_CONFIG = -DLONGBLAS='long long' 
+UMFPACK_CONFIG = -DLONGBLAS='long long'
+CHOLMOD_CONFIG = -DLONGBLAS='long long'
+SPQR_CONFIG = -DLONGBLAS='long long'
+ifeq ($(USE_SYSTEM_BLAS), 0)
+ifneq ($(USE_INTEL_MKL), 1)
+UMFPACK_CONFIG += -DSUN64
+CHOLMOD_CONFIG += -DSUN64
+SPQR_CONFIG += -DSUN64
+endif
+endif
 endif
 
 SUITE_SPARSE_LIB = -lm
@@ -1294,7 +1364,7 @@ SUITE_SPARSE_LIB += -Wl,-rpath,'$(build_libdir)'
 endif
 SUITESPARSE_MFLAGS = CC="$(CC)" CXX="$(CXX)" F77="$(FC)" AR="$(AR)" RANLIB="$(RANLIB)" BLAS="$(LIBBLAS)" LAPACK="$(LIBLAPACK)" \
 	  INSTALL_LIB="$(build_libdir)" INSTALL_INCLUDE="$(build_includedir)" LIB="$(SUITE_SPARSE_LIB)" \
-	  UMFPACK_CONFIG="$(UMFPACK_CONFIG)" CHOLMOD_CONFIG="$(CHOLMOD_CONFIG)"
+	  UMFPACK_CONFIG="$(UMFPACK_CONFIG)" CHOLMOD_CONFIG="$(CHOLMOD_CONFIG)" SPQR_CONFIG="$(SPQR_CONFIG)"
 
 SuiteSparse-$(SUITESPARSE_VER).tar.gz:
 	$(JLDOWNLOAD) $@ http://faculty.cse.tamu.edu/davis/SuiteSparse/$@
@@ -1479,8 +1549,6 @@ endif
 	touch -c $@
 gmp-$(GMP_VER)/config.status: gmp-$(GMP_VER)/configure
 	cd gmp-$(GMP_VER) && \
-	sed -ibackup 's|includeexecdir = $$(exec_prefix)/include|includeexecdir = $$(includedir)|g' Makefile.in && \
-	sed -ibackup 's|includeexecdir = $$(exec_prefix)/include|includeexecdir = $$(includedir)|g' Makefile.am && \
 	./configure $(CONFIGURE_COMMON) F77= --enable-shared --disable-static
 	touch -c $@
 $(GMP_SRC_TARGET): gmp-$(GMP_VER)/config.status
@@ -1490,13 +1558,10 @@ ifeq ($(OS),$(BUILD_OS))
 	$(MAKE) -C gmp-$(GMP_VER) $(LIBTOOL_CCLD) check
 endif
 	echo 1 > $@
-$(GMP_OBJ_TARGET): $(GMP_SRC_TARGET) gmp-$(GMP_VER)/checked
-	$(MAKE) -C gmp-$(GMP_VER) $(LIBTOOL_CCLD) install $(MAKE_COMMON)
-ifeq ($(OS),WINNT)
-	mv -f $(build_libdir)/libgmp.$(SHLIB_EXT) $@
-endif
+$(GMP_OBJ_TARGET): $(GMP_SRC_TARGET) gmp-$(GMP_VER)/checked | $(build_shlibdir) $(build_includedir)
+	$(INSTALL_M) gmp-$(GMP_VER)/.libs/libgmp.*$(SHLIB_EXT)* $(build_shlibdir)
+	$(INSTALL_F) gmp-$(GMP_VER)/gmp.h $(build_includedir)
 	$(INSTALL_NAME_CMD)libgmp.$(SHLIB_EXT) $@
-	touch -c $@
 
 clean-gmp:
 	-$(MAKE) -C gmp-$(GMP_VER) clean
@@ -1634,6 +1699,33 @@ configure-git: git-$(GIT_VER)/config.status
 compile-git: $(GIT_SOURCE)
 check-git: git-$(GIT_VER)/checked
 install-git: $(GIT_TARGET)
+
+## virtualenv
+
+VIRTUALENV_SOURCE = virtualenv-$(VIRTUALENV_VER)/virtualenv.py
+VIRTUALENV_TARGET = julia-env
+
+virtualenv-$(VIRTUALENV_VER).tar.gz:
+	$(JLDOWNLOAD) $@ https://pypi.python.org/packages/source/v/virtualenv/$@
+$(VIRTUALENV_SOURCE): virtualenv-$(VIRTUALENV_VER).tar.gz
+	$(JLCHECKSUM) $<
+	$(TAR) zxf $<
+	touch -c $@
+$(VIRTUALENV_TARGET): $(VIRTUALENV_SOURCE)
+	"$(shell ./find_python2)" $< $@
+	touch -c $@
+
+clean-virtualenv:
+	-$(MAKE) -C virtualenv-$(VIRTUALENV_VER) clean
+	-rm -f $(VIRTUALENV_TARGET)
+distclean-virtualenv:
+	-rm -rf virtualenv-$(VIRTUALENV_VER).tar.gz virtualenv-$(VIRTUALENV_VER)
+
+get-virtualenv: virtualenv-$(VIRTUALENV_VER).tar.gz
+configure-virtualenv: get-virtualenv
+compile-virtualenv: $(VIRTUALENV_SOURCE)
+check-virtualenv: compile-virtualenv
+install-virtualenv: $(VIRTUALENV_TARGET)
 
 ## phony targets ##
 

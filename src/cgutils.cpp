@@ -226,20 +226,20 @@ extern "C" {
     extern void jl_cpuid(int32_t CPUInfo[4], int32_t InfoType);
 }
 
-static void jl_gen_llvm_gv_array()
+static void jl_gen_llvm_gv_array(llvm::Module *mod)
 {
     // emit the variable table into the code image (can only call this once)
     // used just before dumping bitcode
     ArrayType *atype = ArrayType::get(T_psize,jl_sysimg_gvars.size());
     new GlobalVariable(
-            *jl_Module,
+            *mod,
             atype,
             true,
             GlobalVariable::ExternalLinkage,
             ConstantArray::get(atype, ArrayRef<Constant*>(jl_sysimg_gvars)),
             "jl_sysimg_gvars");
     new GlobalVariable(
-            *jl_Module,
+            *mod,
             T_size,
             true,
             GlobalVariable::ExternalLinkage,
@@ -247,7 +247,7 @@ static void jl_gen_llvm_gv_array()
             "jl_globalUnique");
 
     Constant *feature_string = ConstantDataArray::getString(jl_LLVMContext, jl_cpu_string);
-    new GlobalVariable(*jl_Module,
+    new GlobalVariable(*mod,
                        feature_string->getType(),
                        true,
                        GlobalVariable::ExternalLinkage,
@@ -259,7 +259,7 @@ static void jl_gen_llvm_gv_array()
         uint32_t info[4];
 
         jl_cpuid((int32_t*)info, 1);
-        new GlobalVariable(*jl_Module,
+        new GlobalVariable(*mod,
                            T_int64,
                            true,
                            GlobalVariable::ExternalLinkage,
@@ -823,29 +823,6 @@ static Value *emit_bounds_check(Value *i, Value *len, jl_codectx_t *ctx)
     }
 #endif
     return im1;
-}
-
-static void emit_func_check(Value *x, jl_codectx_t *ctx)
-{
-    Value *xty = emit_typeof(x);
-    Value *isfunc =
-        builder.
-        CreateOr(builder.
-                 CreateICmpEQ(xty,
-                              literal_pointer_val((jl_value_t*)jl_function_type)),
-                 builder.
-                 CreateICmpEQ(xty,
-                              literal_pointer_val((jl_value_t*)jl_datatype_type)));
-    BasicBlock *elseBB1 = BasicBlock::Create(getGlobalContext(),"notf", ctx->f);
-    BasicBlock *mergeBB1 = BasicBlock::Create(getGlobalContext(),"isf");
-    builder.CreateCondBr(isfunc, mergeBB1, elseBB1);
-
-    builder.SetInsertPoint(elseBB1);
-    emit_type_error(x, (jl_value_t*)jl_function_type, "apply", ctx);
-
-    builder.CreateBr(mergeBB1);
-    ctx->f->getBasicBlockList().push_back(mergeBB1);
-    builder.SetInsertPoint(mergeBB1);
 }
 
 // --- loading and storing ---
@@ -1464,7 +1441,7 @@ static jl_value_t *static_void_instance(jl_value_t *jt)
     if (jl_tuple_len(jt) == 0)
         return (jl_value_t*)jl_null;
     size_t nargs = jl_tuple_len(jt);
-    jl_value_t *tpl = (jl_value_t*)jl_alloc_tuple_uninit(nargs);
+    jl_value_t *tpl = (jl_value_t*)jl_alloc_tuple(nargs);
     JL_GC_PUSH1(&tpl);
     for(size_t i=0; i < nargs; i++) {
         jl_tupleset(tpl, i, static_void_instance(jl_tupleref(jt,i)));
@@ -1521,7 +1498,7 @@ static jl_value_t *static_constant_instance(Constant *constant, jl_value_t *jt)
     else
         assert(false && "Cannot process this type of constant");
 
-    jl_value_t *tpl = (jl_value_t*)jl_alloc_tuple_uninit(nargs);
+    jl_value_t *tpl = (jl_value_t*)jl_alloc_tuple(nargs);
     JL_GC_PUSH1(&tpl);
     for(size_t i=0; i < nargs; i++) {
         jl_tupleset(tpl, i, static_constant_instance(

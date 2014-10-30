@@ -40,12 +40,7 @@ Type         Signed?  Number of bits  Smallest value Largest value
 ``Int128``         ✓       128           -2^127          2^127 - 1
 ``Uint128``                128           0               2^128 - 1
 ``Bool``         N/A       8           ``false`` (0)  ``true`` (1)
-``Char``         N/A       32          ``'\0'``       ``'\Uffffffff'``
 ===========  =======  ==============  ============== ==================
-
-``Char`` natively supports representation of
-`Unicode characters <http://en.wikipedia.org/wiki/Unicode>`_; see
-:ref:`man-strings` for more details.
 
 -  **Floating-point types:**
 
@@ -188,7 +183,7 @@ such as integers are given by the ``typemin`` and ``typemax`` functions:
     julia> (typemin(Int32), typemax(Int32))
     (-2147483648,2147483647)
 
-    julia> for T = {Int8,Int16,Int32,Int64,Int128,Uint8,Uint16,Uint32,Uint64,Uint128}
+    julia> for T in [Int8,Int16,Int32,Int64,Int128,Uint8,Uint16,Uint32,Uint64,Uint128]
              println("$(lpad(T,7)): [$(typemin(T)),$(typemax(T))]")
            end
        Int8: [-128,127]

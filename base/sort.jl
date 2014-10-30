@@ -20,6 +20,7 @@ export # also exported by Base
     sort,
     sort!,
     sortperm,
+    sortperm!,
     sortrows,
     sortcols,
     # algorithms:
@@ -212,7 +213,7 @@ end
 searchsorted{T<:Real}(a::Range{T}, x::Real, o::DirectOrdering) =
     searchsortedfirst(a,x,o):searchsortedlast(a,x,o)
 
-for s in {:searchsortedfirst, :searchsortedlast, :searchsorted}
+for s in [:searchsortedfirst, :searchsortedlast, :searchsorted]
     @eval begin
         $s(v::AbstractVector, x, o::Ordering) = $s(v,x,1,length(v),o)
         $s(v::AbstractVector, x;
@@ -341,6 +342,14 @@ sortperm(v::AbstractVector; alg::Algorithm=DEFAULT_UNSTABLE,
     lt::Function=isless, by::Function=identity, rev::Bool=false, order::Ordering=Forward) =
     sort!([1:length(v)], alg, Perm(ord(lt,by,rev,order),v))
 
+function sortperm!{I<:Integer}(x::Vector{I}, v::AbstractVector; alg::Algorithm=DEFAULT_UNSTABLE,
+                               lt::Function=isless, by::Function=identity, rev::Bool=false, order::Ordering=Forward,
+                               initialized::Bool=false)
+    length(x) != length(v) && throw(ArgumentError("Index vector must be the same length as the source vector."))
+    !initialized && @inbounds for i = 1:length(v); x[i] = i; end
+    sort!(x, alg, Perm(ord(lt,by,rev,order),v))
+end
+
 ## sorting multi-dimensional arrays ##
 
 sort(A::AbstractArray, dim::Integer; kws...) = mapslices(a->sort(a; kws...), A, [dim])
@@ -367,7 +376,7 @@ using ...Order
 
 import Core.Intrinsics: unbox, slt_int
 import ..Sort: sort!
-import ...Order: lt, DirectOrdering, uint_mapping
+import ...Order: lt, DirectOrdering
 
 typealias Floats Union(Float32,Float64)
 

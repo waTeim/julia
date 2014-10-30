@@ -26,8 +26,10 @@ end
 n=12 #Size of matrix problem to test
 
 #Issue #7647: test xsyevr, xheevr, xstevr drivers
-for Mi7647 in {Symmetric(diagm([1.0:3.0])), Hermitian(diagm([1.0:3.0])),
-          Hermitian(diagm(complex([1.0:3.0]))), SymTridiagonal([1.0:3.0], zeros(2))}
+for Mi7647 in (Symmetric(diagm([1.0:3.0])),
+               Hermitian(diagm([1.0:3.0])),
+               Hermitian(diagm(complex([1.0:3.0]))),
+               SymTridiagonal([1.0:3.0], zeros(2)))
     debug && println("Eigenvalues in interval for $(typeof(Mi7647))")
     @test eigmin(Mi7647)  == eigvals(Mi7647, 0.5, 1.5)[1] == 1.0
     @test eigmax(Mi7647)  == eigvals(Mi7647, 2.5, 3.5)[1] == 3.0
@@ -198,11 +200,6 @@ for elty in (Float32, Float64, Complex{Float32}, Complex{Float64})
         @test_approx_eq full(cholfact(A, ul)[ul]) full(invoke(Base.LinAlg.chol!, (AbstractMatrix,Symbol),copy(A), ul))
     end
 end
-
-# Issue #7886
-x, r = LAPACK.gelsy!([0 1; 0 2; 0 3.], [2, 4, 6.])
-@test_approx_eq x [0,2]
-@test r == 1
 
 # Issue #7933
 A7933 = [1 2; 3 4]

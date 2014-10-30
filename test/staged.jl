@@ -76,3 +76,24 @@ stagedfunction mygetindex(S::SubArray, indexes::Real...)
     ex
 end
 @test mygetindex(B,2,2) == A[2,2,2]
+
+# issue #8497
+module MyTest8497
+internalfunction(x) = x+1
+stagedfunction h(x)
+    quote
+        internalfunction(x)
+    end
+end
+end
+@test MyTest8497.h(3) == 4
+
+# static parameters (issue #8505)
+stagedfunction foo1{N,T}(a::Array{T,N})
+    "N = $N, T = $T"
+end
+stagedfunction foo2{T,N}(a::Array{T,N})
+    "N = $N, T = $T"
+end
+@test foo1(randn(3,3)) == "N = 2, T = Float64"
+@test foo2(randn(3,3)) == "N = 2, T = Float64"

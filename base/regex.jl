@@ -14,7 +14,7 @@ type Regex
 
     function Regex(pattern::String, options::Integer)
         pattern = bytestring(pattern)
-        options = uint32(options)
+        options = int32(options)
         if (options & ~PCRE.OPTIONS_MASK) != 0
             error("invalid regex options: $options")
         end
@@ -165,7 +165,7 @@ function matchall(re::Regex, str::UTF8String, overlap::Bool=false)
         prevempty = offset == ovec[2]
         if overlap
             if !prevempty
-                offset = int32(nextind(str, offset + 1) - 1)
+                offset = int32(ovec[1]+1)
             end
         else
             offset = ovec[2]

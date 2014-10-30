@@ -137,9 +137,9 @@ export
     Expr, GotoNode, LabelNode, LineNumberNode, QuoteNode, SymbolNode, TopNode,
     GetfieldNode, NewvarNode,
     # object model functions
-    apply, fieldtype, getfield, setfield!, yieldto, throw, tuple, is, ===, isdefined,
-    # arraylen, arrayref, arrayset, arraysize, tuplelen, tupleref, convert_default,
-    # kwcall,
+    fieldtype, getfield, setfield!, yieldto, throw, tuple, is, ===, isdefined,
+    # arraylen, arrayref, arrayset, arraysize, tuplelen, tupleref,
+    # _apply, kwcall,
     # sizeof    # not exported, to avoid conflicting with Base.sizeof
     # type reflection
     issubtype, typeof, isa,
@@ -153,7 +153,7 @@ export
     #ccall, cglobal, llvmcall, abs_float, add_float, add_int, and_int, ashr_int,
     #box, bswap_int, checked_fptosi, checked_fptoui, checked_sadd,
     #checked_smul, checked_ssub, checked_uadd, checked_umul, checked_usub,
-    #checked_trunc_sint, checked_trunc_uint,
+    #checked_trunc_sint, checked_trunc_uint, check_top_bit,
     #nan_dom_err, copysign_float, ctlz_int, ctpop_int, cttz_int,
     #div_float, eq_float, eq_int, eqfsi64, eqfui64, flipsign_int, select_value,
     #sqrt_llvm, powi_llvm,
@@ -180,7 +180,7 @@ bitstype 32 Float32 <: FloatingPoint
 bitstype 64 Float64 <: FloatingPoint
 
 bitstype 8  Bool <: Integer
-bitstype 32 Char <: Integer
+bitstype 32 Char
 
 bitstype 8   Int8    <: Signed
 bitstype 8   Uint8   <: Unsigned
@@ -217,9 +217,6 @@ type InterruptException <: Exception end
 abstract String
 abstract DirectIndexString <: String
 
-# simple convert for use by constructors of types in Core
-convert(T, x) = convert_default(T, x, convert)
-
 type SymbolNode
     name::Symbol
     typ
@@ -243,3 +240,38 @@ end
 typealias ByteString Union(ASCIIString,UTF8String)
 
 include(fname::ByteString) = ccall(:jl_load_, Any, (Any,), fname)
+
+# constructors for built-in types
+
+TypeVar(n::Symbol) =
+    ccall(:jl_new_typevar, Any, (Any, Any, Any), n, Union(), Any)::TypeVar
+TypeVar(n::Symbol, ub::ANY) =
+    (isa(ub,Bool) ?
+     ccall(:jl_new_typevar_, Any, (Any, Any, Any, Any), n, Union(), Any, ub)::TypeVar :
+     ccall(:jl_new_typevar, Any, (Any, Any, Any), n, Union(), ub::Type)::TypeVar)
+TypeVar(n::Symbol, lb::ANY, ub::ANY) =
+    (isa(ub,Bool) ?
+     ccall(:jl_new_typevar_, Any, (Any, Any, Any, Any), n, Union(), lb::Type, ub)::TypeVar :
+     ccall(:jl_new_typevar, Any, (Any, Any, Any), n, lb::Type, ub::Type)::TypeVar)
+TypeVar(n::Symbol, lb::ANY, ub::ANY, b::Bool) =
+    ccall(:jl_new_typevar_, Any, (Any, Any, Any, Any), n, lb::Type, ub::Type, b)::TypeVar
+
+TypeConstructor(p::ANY, t::ANY) = ccall(:jl_new_type_constructor, Any, (Any, Any), p::Tuple, t::Type)
+
+Expr(args::ANY...) = _expr(args...)
+
+LineNumberNode(n::Int) = ccall(:jl_new_struct, Any, (Any,Any...), LineNumberNode, n)::LineNumberNode
+LabelNode(n::Int) = ccall(:jl_new_struct, Any, (Any,Any...), LabelNode, n)::LabelNode
+GotoNode(n::Int) = ccall(:jl_new_struct, Any, (Any,Any...), GotoNode, n)::GotoNode
+QuoteNode(x::ANY) = ccall(:jl_new_struct, Any, (Any,Any...), QuoteNode, x)::QuoteNode
+NewvarNode(s::Symbol) = ccall(:jl_new_struct, Any, (Any,Any...), NewvarNode, s)::NewvarNode
+TopNode(s::Symbol) = ccall(:jl_new_struct, Any, (Any,Any...), TopNode, s)::TopNode
+
+Module(name::Symbol) = ccall(:jl_f_new_module, Any, (Any,), name)::Module
+Module() = Module(:anonymous)
+
+Task(f::ANY) = ccall(:jl_new_task, Any, (Any, Int), f::Function, 0)::Task
+
+# simple convert for use by constructors of types in Core
+convert(::Type{Any}, x::ANY) = x
+convert{T}(::Type{T}, x::T) = x

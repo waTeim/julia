@@ -732,7 +732,7 @@
 	  `(function (call ,name ,@field-names)
 		     (block
 		      (call new ,@field-names)))))
-    (if gen-specific?
+    (if (and gen-specific? (any (lambda (t) (not (eq? t 'Any))) field-types))
 	(list
 	 ;; definition with field types for all arguments
 	 `(function (call ,name
@@ -751,18 +751,31 @@
 	       (block
 		(call (curly ,name ,@params) ,@field-names)))))
 
-(define (new-call Texpr args field-names field-types mutabl)
+(define (new-call Tname type-params params args field-names field-types mutabl)
   (if (any vararg? args)
       (error "... is not supported inside \"new\""))
   (if (any kwarg? args)
       (error "\"new\" does not accept keyword arguments"))
-  (cond ((length> args (length field-names))
-	 `(call (top error) "new: too many arguments"))
-	(else
-	 `(new ,Texpr
-	       ,@(map (lambda (fty val)
-			`(call (top convert) ,fty ,val))
-		      (list-head field-types (length args)) args)))))
+  (if (length> params (length type-params))
+      (error "too few type parameters specified in \"new{...}\""))
+  (let ((Texpr (if (null? type-params)
+		   `(|.| ,(current-julia-module) ',Tname)
+		   `(curly (|.| ,(current-julia-module) ',Tname)
+			   ,@type-params))))
+    (cond ((length> args (length field-names))
+	   `(call (top error) "new: too many arguments"))
+	  (else
+	   (if (equal? type-params params)
+	       `(new ,Texpr ,@(map (lambda (fty val)
+				     `(call (top convert) ,fty ,val))
+				   (list-head field-types (length args)) args))
+	       (let ((tn (gensy)))
+		 `(let (new ,tn ,@(map (lambda (fld val)
+					 `(call (top convert)
+						(call (top fieldtype) ,tn (quote ,fld))
+						,val))
+				       (list-head field-names (length args)) args))
+		    (= ,tn ,Texpr))))))))
 
 ;; insert a statement after line number node
 (define (prepend-stmt stmt body)
@@ -775,45 +788,72 @@
 	     `(block ,stmt ,@(cdr body))))
       body))
 
-(define (rewrite-ctor ctor Tname params field-names field-types mutabl iname)
-  (define (ctor-body body)
+;; insert item at start of arglist
+(define (arglist-unshift sig item)
+  (if (and (pair? sig) (pair? (car sig)) (eq? (caar sig) 'parameters))
+      `(,(car sig) ,item ,@(cdr sig))
+      `(,item ,@sig)))
+
+(define (ctor-signature name params bounds method-params sig)
+  (if (null? params)
+      (if (null? method-params)
+	  (cons `(call call ,@(arglist-unshift sig `(|::| ,(gensy) (curly Type ,name))))
+		params)
+	  (cons `(call (curly call ,@method-params)
+		       ,@(arglist-unshift sig `(|::| ,(gensy) (curly Type ,name))))
+		params))
+      (if (null? method-params)
+	  (cons `(call (curly call ,@(map (lambda (p b) `(<: ,p ,b)) params bounds))
+		       ,@(arglist-unshift sig `(|::| ,(gensy) (curly Type (curly ,name ,@params)))))
+		params)
+	  ;; rename parameters that conflict with user-written method parameters
+	  (let ((new-params (map (lambda (p) (if (memq p method-params)
+						 (gensy)
+						 p))
+				 params)))
+	    (cons `(call (curly call ,@(map (lambda (p b) `(<: ,p ,b)) new-params bounds)
+				,@method-params)
+			 ,@(arglist-unshift sig `(|::| ,(gensy) (curly Type (curly ,name ,@new-params)))))
+		  new-params)))))
+
+(define (ctor-def keyword name Tname params bounds method-params sig ctor-body body)
+  (if (eq? name Tname)
+      (let* ((temp   (ctor-signature name params bounds method-params sig))
+	     (sig    (car temp))
+	     (params (cdr temp)))
+	`(,keyword ,sig ,(ctor-body body params)))
+      `(,keyword (call (curly ,name ,@method-params) ,@sig)
+		 ;; pass '() in order to require user-specified parameters with
+		 ;; new{...} inside a non-ctor inner definition.
+		 ,(ctor-body body '()))))
+
+(define (rewrite-ctor ctor Tname params bounds field-names field-types mutabl)
+  (define (ctor-body body type-params)
     (pattern-replace (pattern-set
 		      (pattern-lambda
 		       (call (-/ new) . args)
-		       (new-call (if (null? params)
-				     ;; be careful to avoid possible conflicts
-				     ;; with local & arg names
-				     `(|.| ,(current-julia-module) ',Tname)
-				     `(curly (|.| ,(current-julia-module) ',Tname)
-					     ,@params))
-				 args
-				 field-names
-				 field-types
-				 mutabl)))
+		       (new-call Tname type-params params
+				 args field-names field-types mutabl))
+		      (pattern-lambda
+		       (call (curly (-/ new) . p) . args)
+		       (new-call Tname p params
+				 args field-names field-types mutabl)))
 		     body))
-  (let ((ctor2
-	 (pattern-replace
-	  (pattern-set
-	   (pattern-lambda (function (call (curly name . p) . sig) body)
-			   `(function (call (curly ,(if (eq? name Tname) iname name) ,@p) ,@sig)
-				      ,(ctor-body body)))
-       (pattern-lambda (stagedfunction (call (curly name . p) . sig) body)
-               `(stagedfunction (call (curly ,(if (eq? name Tname) iname name) ,@p) ,@sig)
-                      ,(ctor-body body)))
-	   (pattern-lambda (function (call name . sig) body)
-			   `(function (call ,(if (eq? name Tname) iname name) ,@sig)
-				      ,(ctor-body body)))
-       (pattern-lambda (stagedfunction (call name . sig) body)
-               `(stagedfunction (call ,(if (eq? name Tname) iname name) ,@sig)
-                      ,(ctor-body body)))
-	   (pattern-lambda (= (call (curly name . p) . sig) body)
-			   `(= (call (curly ,(if (eq? name Tname) iname name) ,@p) ,@sig)
-			       ,(ctor-body body)))
-	   (pattern-lambda (= (call name . sig) body)
-			   `(= (call ,(if (eq? name Tname) iname name) ,@sig)
-			       ,(ctor-body body))))
-	  ctor)))
-    ctor2))
+  (pattern-replace
+   (pattern-set
+    (pattern-lambda (function (call (curly name . p) . sig) body)
+		    (ctor-def 'function name Tname params bounds p sig ctor-body body))
+    (pattern-lambda (stagedfunction (call (curly name . p) . sig) body)
+		    (ctor-def 'stagedfunction name Tname params bounds p sig ctor-body body))
+    (pattern-lambda (function (call name . sig) body)
+		    (ctor-def 'function name Tname params bounds '() sig ctor-body body))
+    (pattern-lambda (stagedfunction (call name . sig) body)
+		    (ctor-def 'stagedfunction name Tname params bounds '() sig ctor-body body))
+    (pattern-lambda (= (call (curly name . p) . sig) body)
+		    (ctor-def 'function name Tname params bounds p sig ctor-body body))
+    (pattern-lambda (= (call name . sig) body)
+		    (ctor-def 'function name Tname params bounds '() sig ctor-body body)))
+   ctor))
 
 ;; remove line numbers and nested blocks
 (define (flatten-blocks e)
@@ -843,60 +883,52 @@
 	       field-names)
      (if (null? params)
 	 `(block
-	   (global ,name)
-	   (const ,name)
+	   (global ,name) (const ,name)
 	   (composite_type ,name (tuple ,@params)
 			   (tuple ,@(map (lambda (x) `',x) field-names))
-			   (null) ,super (tuple ,@field-types)
-			   ,mut)
+			   ,super (tuple ,@field-types) ,mut)
 	   (call
 	    (lambda ()
 	      (scope-block
 	       (block
-		(global ,name)
+		(global ,name) (global call)
 		,@(map (lambda (c)
-			 (rewrite-ctor c name '() field-names field-types mut name))
+			 (rewrite-ctor c name '() '() field-names field-types mut))
 		       defs2)))))
 	   (null))
 	 ;; parametric case
 	 `(block
 	   (scope-block
 	    (block
-	     (global ,name)
-	     (const ,name)
+	     (global ,name) (const ,name)
 	     ,@(map (lambda (v) `(local ,v)) params)
 	     ,@(map make-assignment params (symbols->typevars params bounds #t))
 	     (composite_type ,name (tuple ,@params)
 			     (tuple ,@(map (lambda (x) `',x) field-names))
-			     ,(let ((instantiation-name (gensy)))
-				`(lambda (,instantiation-name)
-				   (scope-block
-				    ;; don't capture params; in here they are static
-				    ;; parameters
-				    (block
-				     (global ,@params)
-				     ,@(map
-					(lambda (c)
-					  (rewrite-ctor c name params field-names
-							field-types mut instantiation-name))
-					defs2)
-				     ,name))))
-			     ,super (tuple ,@field-types)
-			     ,mut)))
-	   (scope-block
-	    (block
-	     (global ,name)
-	     (global ,@params)
-	     ,@(if (and (null? defs)
-			;; don't generate an outer constructor if the type has
-			;; parameters not mentioned in the field types. such a
-			;; constructor would not be callable anyway.
-			(every (lambda (sp)
-				 (expr-contains-eq sp (cons 'list field-types)))
-			       params))
-		   `(,(default-outer-ctor name field-names field-types
-			params bounds))
-		   '())))
+			     ,super (tuple ,@field-types) ,mut)))
+	   ;; "inner" constructors
+	   (call
+	    (lambda ()
+	      (scope-block
+	       (block
+		(global ,name) (global call)
+		,@(map (lambda (c)
+			 (rewrite-ctor c name params bounds field-names field-types mut))
+		       defs2)))))
+	   ;; "outer" constructors
+	   ,@(if (and (null? defs)
+		      ;; don't generate an outer constructor if the type has
+		      ;; parameters not mentioned in the field types. such a
+		      ;; constructor would not be callable anyway.
+		      (every (lambda (sp)
+			       (expr-contains-eq sp (cons 'list field-types)))
+			     params))
+		 `((scope-block
+		    (block
+		     (global ,name)
+		     ,(default-outer-ctor name field-names field-types
+			params bounds))))
+		 '())
 	   (null))))))
 
 (define (abstract-type-def-expr name params super)
@@ -1454,7 +1486,9 @@
 				  "\" (expected assignment)"))))))))
 
 (define (lower-kw-call f kw pa)
-  (check-kw-args kw)
+  (if (any (lambda (x) (and (pair? x) (eq? (car x) 'parameters)))
+	   kw)
+      (error "more than one semicolon in argument list"))
   (receive
    (keys restkeys) (separate kwarg? kw)
    (let ((keyargs (apply append
@@ -1467,8 +1501,8 @@
 				`((quote ,(cadr a)) ,(caddr a)))
 			      keys))))
      (if (null? restkeys)
-	 `(call (top kwcall) ,f ,(length keys) ,@keyargs
-		(call (top Array) (top Any) ,(* 2 (length keys)))
+	 `(call (top kwcall) call ,(length keys) ,@keyargs
+		,f (call (top Array) (top Any) ,(* 2 (length keys)))
 		,@pa)
 	 (let ((container (gensy)))
 	   `(block
@@ -1476,17 +1510,24 @@
 	     ,@(let ((k (gensy))
 		     (v (gensy)))
 		 (map (lambda (rk)
-			`(for (= (tuple ,k ,v) ,(cadr rk))
-			      (ccall 'jl_cell_1d_push2 Void
-				     (tuple Any Any Any)
-				     ,container
-				     (|::| ,k (top Symbol))
-				     ,v)))
+			(let ((push-expr `(ccall 'jl_cell_1d_push2 Void
+						 (tuple Any Any Any)
+						 ,container
+						 (|::| ,k (top Symbol))
+						 ,v)))
+			  (if (vararg? rk)
+			      `(for (= (tuple ,k ,v) ,(cadr rk))
+				    ,push-expr)
+			      `(block (= (tuple ,k ,v) ,rk)
+				      ,push-expr))))
 		      restkeys))
-	     (if (call (top isempty) ,container)
-		 (call ,f ,@pa)
-		 (call (top kwcall) ,f ,(length keys) ,@keyargs
-		       ,container ,@pa))))))))
+	     ,(let ((kw-call `(call (top kwcall) call ,(length keys) ,@keyargs
+				    ,f ,container ,@pa)))
+		(if (not (null? keys))
+		    kw-call
+		    `(if (call (top isempty) ,container)
+			 (call ,f ,@pa)
+			 ,kw-call)))))))))
 
 (define (expand-transposed-op e ops)
   (let ((a (caddr e))
@@ -1585,7 +1626,7 @@
 		  ,.(if (eq? bb b) '() `((= ,bb ,(expand-forms b))))
 		  (call (top setfield!) ,aa ,bb
 			(call (top convert)
-			      (call (top fieldtype) ,aa ,bb)
+			      (call (top fieldtype) (call (top typeof) ,aa) ,bb)
 			      ,(expand-forms rhs)))))))
 
 	   ((tuple)
@@ -1685,7 +1726,10 @@
 
    'ref
    (lambda (e)
-     (expand-forms (partially-expand-ref e)))
+     (let ((args (cddr e)))
+       (if (has-parameters? args)
+	 (error "unexpected semicolon in array expression")
+	 (expand-forms (partially-expand-ref e)))))
 
    'curly
    (lambda (e)
@@ -1700,9 +1744,9 @@
 		       (eq? (car (caddr e)) 'parameters))
 		  ;; (call f (parameters . kwargs) ...)
 		  (expand-forms
-		   (receive
-		    (kws args) (separate kwarg? (cdddr e))
-		    (lower-kw-call f (append kws (cdr (caddr e))) args))))
+		    (receive
+		      (kws args) (separate kwarg? (cdddr e))
+		      (lower-kw-call f (append kws (cdr (caddr e))) args))))
 		 ((any kwarg? (cddr e))
 		  ;; (call f ... (kw a b) ...)
 		  (expand-forms
@@ -1728,7 +1772,7 @@
 					   (tuple-wrap (cdr a) '())))
 				(tuple-wrap (cdr a) (cons x run))))))
 		    (expand-forms
-		     `(call (top apply) ,f ,@(tuple-wrap argl '())))))
+		     `(call (top _apply) call ,f ,@(tuple-wrap argl '())))))
 
 		 ((and (eq? (cadr e) '*) (length= e 4))
 		  (expand-transposed-op
@@ -1761,14 +1805,13 @@
 
    'dict
    (lambda (e)
+     ;; TODO: deprecate
      `(call (top Dict)
-	    (call (top tuple)
-		  ,.(map (lambda (x) (expand-forms (cadr  x))) (cdr e)))
-	    (call (top tuple)
-		  ,.(map (lambda (x) (expand-forms (caddr x))) (cdr e)))))
+	    ,.(map expand-forms (cdr e))))
 
    'typed_dict
    (lambda (e)
+     ;; TODO: deprecate
      (let ((atypes (cadr e))
 	   (args   (cddr e)))
        (if (and (length= atypes 3)
@@ -1776,16 +1819,18 @@
 	   `(call (call (top apply_type) (top Dict)
 			,(expand-forms (cadr atypes))
 			,(expand-forms (caddr atypes)))
-		  (call (top tuple)
-			,.(map (lambda (x) (expand-forms (cadr  x))) args))
-		  (call (top tuple)
-			,.(map (lambda (x) (expand-forms (caddr x))) args)))
+		  ,.(map expand-forms args))
 	   (error (string "invalid \"typed_dict\" syntax " (deparse atypes))))))
+
+   '=>
+   (lambda (e) `(call => ,(expand-forms (cadr e)) ,(expand-forms (caddr e))))
 
    'cell1d
    (lambda (e)
      (let ((args (cdr e)))
-       (cond ((any vararg? args)
+       (cond ((has-parameters? args)
+	      (error "unexpected semicolon in array expression"))
+	     ((any vararg? args)
 	      (expand-forms
 	       `(call (top cell_1d) ,@args)))
 	     (else
@@ -1904,20 +1949,22 @@
    'vcat
    (lambda (e)
      (let ((a (cdr e)))
-       (expand-forms
-	(if (any (lambda (x)
-		   (and (pair? x) (eq? (car x) 'row)))
-		 a)
-	    ;; convert nested hcat inside vcat to hvcat
-	    (let ((rows (map (lambda (x)
+       (if (has-parameters? a)
+	 (error "unexpected semicolon in array expression")
+         (expand-forms
+	   (if (any (lambda (x)
+		      (and (pair? x) (eq? (car x) 'row)))
+		    a)
+	     ;; convert nested hcat inside vcat to hvcat
+	     (let ((rows (map (lambda (x)
 			       (if (and (pair? x) (eq? (car x) 'row))
 				   (cdr x)
 				   (list x)))
 			     a)))
-	      `(call hvcat
-		     (tuple ,.(map length rows))
+	       `(call hvcat
+		   (tuple ,.(map length rows))
 		     ,.(apply nconc rows)))
-	    `(call vcat ,@a)))))
+	     `(call vcat ,@a))))))
 
    'typed_hcat
    (lambda (e)
@@ -3180,7 +3227,7 @@ So far only the second case can actually occur.
 	((not (contains (lambda (e) (and (pair? e) (eq? (car e) '$))) e))
 	 `(copyast (inert ,e)))
 	((not (any splice-expr? e))
-	 `(call (top Expr) ,.(map expand-backquote e)))
+	 `(call (top _expr) ,.(map expand-backquote e)))
 	(else
 	 (let loop ((p (cdr e)) (q '()))
 	   (if (null? p)
