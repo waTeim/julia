@@ -4,12 +4,19 @@ Julia v0.4.0 Release Notes
 New language features
 ---------------------
 
+  * Function-call overloading: for arbitrary objects `x` (not of type
+    `Function`), `x(...)` is transformed into `call(x, ...)`, and `Base.call`
+    can be overloaded as desired.  Constructors are now a special case of
+    this mechanism, which allows e.g. constructors for abstract types
+    and typealiases.  `T(...)` falls back to `convert(T, x)`, so all
+    `convert` methods implicitly define a constructor ([#8712], [#2403]).
+
   * Unicode version 7 is now supported for identifiers etcetera ([#7917]).
 
   * Type parameters now permit any arbitrary `isbits` type, not just
     `Int` and `Bool` ([#6081]).
 
-  * Keyword argument names can be computed, using syntax such as `f(; (name, val))` ([#7704]).
+  * Keyword argument names can be computed, using syntax such as `f(; symbol => val)` ([#7704]).
 
   * (TODO pending final syntax) staged functions ([#7311]).
 
@@ -29,6 +36,20 @@ Language changes
     dicts are synchronized. As part of this change, `=>` is parsed as a normal
     operator, and `Base` defines it to construct `Pair` objects ([#6739]).
 
+  * `Char` is no longer a subtype of `Integer`. ([#8816])
+    Char now supports a more limited set of operations with `Integer` types:
+       
+      * comparison / equality
+      * `Char` + `Int` = `Char`
+      * `Char` - `Char` = `Int` 
+
+Compiler improvements
+---------------------
+
+  * Functions may be annotated with metadata (`:meta` expressions) to be used by the compiler ([#8297]).
+
+  * `@inline` before a function definition forces the compiler to inline the function ([#8297]).
+
 Library improvements
 --------------------
 
@@ -45,6 +66,8 @@ Library improvements
   * Added generic Cholesky factorization, and the Cholesky factorization is now parametrized on the matrix type ([#7236]).
 
   * Symmetric and Hermitian immutables are now parametrized on matrix type ([#7992]).
+
+  * New `sortperm!` function for pre-allocated index arrays ([#8792]).
 
   * Switch from `O(N)` to `O(logN)` algorithm for `dequeue!(pq, key)`
     with `PriorityQueue`. This provides major speedups for large
@@ -67,11 +90,23 @@ Library improvements
   * New `ordschur` and `ordschur!` functions for sorting a schur factorization by the eigenvalues.
 
   * `deepcopy` recurses through immutable types and makes copies of their mutable fields ([#8560]).
+ 
+  * `@simd` now rejects invalid control flow (`@goto` / break / continue) in the inner loop body at compile time ([#8624]).
+
+  * Givens type doesn't have a size anymore and is no longer a subtype of AbstractMatrix ([#8660])
+
+  * OpenBLAS 64-bit (ILP64) interface is now compiled with a `64_` suffix ([#8734]) to avoid conflicts with external libraries using a 32-bit BLAS ([#4923]).
 
 Deprecated or removed
 ---------------------
 
   * `median` and `median!` no longer accept a `checknan` keyword argument ([#8605]).
+
+  * `inf` and `nan` are now deprecated in favor of `T(Inf)` and `NaN`, respectively ([#8776]).
+
+  * `oftype(T::Type, x)` is deprecated in favor of `convert(T,x)` (or `T(x)`).
+
+  * `{...}` syntax is deprecated in favor of `Any[...]` ([#8578]).
 
 Julia v0.3.0 Release Notes
 ==========================
@@ -811,6 +846,7 @@ Too numerous to mention.
 [#2370]: https://github.com/JuliaLang/julia/issues/2370
 [#2375]: https://github.com/JuliaLang/julia/issues/2375
 [#2380]: https://github.com/JuliaLang/julia/issues/2380
+[#2403]: https://github.com/JuliaLang/julia/issues/2403
 [#2468]: https://github.com/JuliaLang/julia/issues/2468
 [#2515]: https://github.com/JuliaLang/julia/issues/2515
 [#2516]: https://github.com/JuliaLang/julia/issues/2516
@@ -895,6 +931,7 @@ Too numerous to mention.
 [#4874]: https://github.com/JuliaLang/julia/issues/4874
 [#4882]: https://github.com/JuliaLang/julia/issues/4882
 [#4888]: https://github.com/JuliaLang/julia/issues/4888
+[#4923]: https://github.com/JuliaLang/julia/issues/4923
 [#4930]: https://github.com/JuliaLang/julia/issues/4930
 [#4934]: https://github.com/JuliaLang/julia/issues/4934
 [#4943]: https://github.com/JuliaLang/julia/issues/4943
@@ -1005,6 +1042,15 @@ Too numerous to mention.
 [#8011]: https://github.com/JuliaLang/julia/issues/8011
 [#8089]: https://github.com/JuliaLang/julia/issues/8089
 [#8152]: https://github.com/JuliaLang/julia/issues/8152
+[#8297]: https://github.com/JuliaLang/julia/issues/8297
 [#8423]: https://github.com/JuliaLang/julia/issues/8423
 [#8560]: https://github.com/JuliaLang/julia/issues/8560
+[#8578]: https://github.com/JuliaLang/julia/issues/8578
 [#8605]: https://github.com/JuliaLang/julia/issues/8605
+[#8624]: https://github.com/JuliaLang/julia/issues/8624
+[#8660]: https://github.com/JuliaLang/julia/issues/8660
+[#8712]: https://github.com/JuliaLang/julia/issues/8712
+[#8734]: https://github.com/JuliaLang/julia/issues/8734
+[#8776]: https://github.com/JuliaLang/julia/issues/8776
+[#8792]: https://github.com/JuliaLang/julia/issues/8792
+[#8816]: https://github.com/JuliaLang/julia/issues/8816

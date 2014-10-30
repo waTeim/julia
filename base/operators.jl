@@ -54,7 +54,7 @@ lexless(x,y) = lexcmp(x,y)<0
 cmp(x::Integer, y::Integer) = ifelse(isless(x,y), -1, ifelse(isless(y,x), 1, 0))
 
 max(x,y) = ifelse(y < x, x, y)
-min(x,y) = ifelse(x < y, x, y)
+min(x,y) = ifelse(y < x, y, x)
 
 scalarmax(x,y) = max(x,y)
 scalarmax(x::AbstractArray, y::AbstractArray) = error("ordering is not well-defined for arrays")
@@ -163,8 +163,7 @@ A_ldiv_Bt (a,b) = a\transpose(b)
 At_ldiv_Bt(a,b) = transpose(a)\transpose(b)
 
 
-oftype{T}(::Type{T},c) = convert(T,c)
-oftype{T}(x::T,c) = convert(T,c)
+oftype(x,c) = convert(typeof(x),c)
 
 widen{T<:Number}(x::T) = convert(widen(T), x)
 
@@ -498,12 +497,13 @@ export
     getindex,
     setindex!,
     transpose,
-    ctranspose
+    ctranspose,
+    call
 
 import Base: !, !=, $, %, .%, &, *, +, -, .!=, .+, .-, .*, ./, .<, .<=, .==, .>,
     .>=, .\, .^, /, //, <, <:, <<, <=, ==, >, >=, >>, .>>, .<<, >>>,
     <|, |>, \, ^, |, ~, !==, >:, colon, hcat, vcat, hvcat, getindex, setindex!,
-    transpose, ctranspose,
+    transpose, ctranspose, call,
     ≥, ≤, ≠, .≥, .≤, .≠, ÷, ⋅, ×, ∈, ∉, ∋, ∌, ⊆, ⊈, ⊊, ∩, ∪, √, ∛
 
 end

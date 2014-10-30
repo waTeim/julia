@@ -541,7 +541,7 @@ strwidth(s::String) = (w=0; for c in s; w += charwidth(c); end; w)
 strwidth(s::ByteString) = int(ccall(:u8_strwidth, Csize_t, (Ptr{Uint8},), s.data))
 # TODO: implement and use u8_strnwidth that takes a length argument
 
-isascii(c::Char) = c < 0x80
+isascii(c::Char) = c < char(0x80)
 isascii(s::String) = all(isascii, s)
 isascii(s::ASCIIString) = true
 
@@ -661,7 +661,7 @@ const memhash_seed = Uint === Uint64 ? 0x71e729fd56419c81 : 0x56419c81
 
 function hash{T<:ByteString}(s::Union(T,SubString{T}), h::Uint)
     h += memhash_seed
-    ccall(memhash, Uint, (Ptr{Uint8}, Csize_t, Uint32), s, sizeof(s), itrunc(Uint32,h)) + h
+    ccall(memhash, Uint, (Ptr{Uint8}, Csize_t, Uint32), s, sizeof(s), h % Uint32) + h
 end
 hash(s::String, h::Uint) = hash(bytestring(s), h)
 
@@ -1072,8 +1072,8 @@ function shell_parse(raw::String, interp::Bool)
     in_single_quotes = false
     in_double_quotes = false
 
-    args = []
-    arg = []
+    args::Vector{Any} = []
+    arg::Vector{Any} = []
     i = start(s)
     j = i
 

@@ -134,7 +134,17 @@ rem(x::Float64, y::Float64) = box(Float64,rem_float(unbox(Float64,x),unbox(Float
 
 cld{T<:FloatingPoint}(x::T, y::T) = -fld(-x,y)
 
-mod{T<:FloatingPoint}(x::T, y::T) = rem(y+rem(x,y),y)
+function mod{T<:FloatingPoint}(x::T, y::T)
+    r = rem(x,y)
+    if r == 0
+        copysign(r,y)
+    elseif (r > 0) $ (y > 0)
+        r+y
+    else
+        r
+    end
+end
+
 
 ## floating point comparisons ##
 
@@ -253,15 +263,6 @@ nextfloat(x::FloatingPoint) = nextfloat(x,1)
 prevfloat(x::FloatingPoint) = nextfloat(x,-1)
 
 @eval begin
-    inf(::Type{Float16}) = $Inf16
-    nan(::Type{Float16}) = $NaN16
-    inf(::Type{Float32}) = $Inf32
-    nan(::Type{Float32}) = $NaN32
-    inf(::Type{Float64}) = $Inf
-    nan(::Type{Float64}) = $NaN
-    inf{T<:FloatingPoint}(x::T) = inf(T)
-    nan{T<:FloatingPoint}(x::T) = nan(T)
-
     issubnormal(x::Float32) = (abs(x) < $(box(Float32,unbox(Uint32,0x00800000)))) & (x!=0)
     issubnormal(x::Float64) = (abs(x) < $(box(Float64,unbox(Uint64,0x0010000000000000)))) & (x!=0)
 
@@ -285,7 +286,7 @@ prevfloat(x::FloatingPoint) = nextfloat(x,-1)
     realmin() = realmin(Float64)
     realmax() = realmax(Float64)
 
-    eps(x::FloatingPoint) = isfinite(x) ? abs(x) >= realmin(x) ? ldexp(eps(typeof(x)),exponent(x)) : nextfloat(zero(x)) : nan(x)
+    eps(x::FloatingPoint) = isfinite(x) ? abs(x) >= realmin(x) ? ldexp(eps(typeof(x)),exponent(x)) : nextfloat(zero(x)) : oftype(x,NaN)
     eps(::Type{Float16}) = $(box(Float16,unbox(Uint16,0x1400)))
     eps(::Type{Float32}) = $(box(Float32,unbox(Uint32,0x34000000)))
     eps(::Type{Float64}) = $(box(Float64,unbox(Uint64,0x3cb0000000000000)))

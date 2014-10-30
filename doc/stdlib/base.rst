@@ -243,7 +243,7 @@ All Objects
 
 .. function:: oftype(x, y)
 
-   Convert ``y`` to the type of ``x``.
+   Convert ``y`` to the type of ``x`` (``convert(typeof(x), y)``).
 
 .. function:: widen(type | x)
 
@@ -365,9 +365,9 @@ Types
        (80,:mtime,Float64)
        (88,:ctime,Float64)
 
-.. function:: fieldtype(value, name::Symbol)
+.. function:: fieldtype(type, name::Symbol | index::Int)
 
-   Determine the declared type of a named field in a value of composite type.
+   Determine the declared type of a field (specified by name or index) in a composite type.
 
 .. function:: isimmutable(v)
 
@@ -1295,11 +1295,11 @@ Strings
 
 .. function:: is_valid_ascii(s) -> Bool
 
-   Returns true if the string or byte vector is valid ASCII, false otherwise.
+   Returns true if the argument (``ASCIIString``, ``UTF8String``, or byte vector) is valid ASCII, false otherwise.
 
 .. function:: is_valid_utf8(s) -> Bool
 
-   Returns true if the string or byte vector is valid UTF-8, false otherwise.
+   Returns true if the argument (``ASCIIString``, ``UTF8String``, or byte vector) is valid UTF-8, false otherwise.
 
 .. function:: is_valid_char(c) -> Bool
 
@@ -1559,7 +1559,7 @@ Strings
 
 .. function:: is_valid_utf16(s) -> Bool
 
-   Returns true if the string or ``Uint16`` array is valid UTF-16.
+   Returns true if the argument (``UTF16String`` or ``Uint16`` array) is valid UTF-16.
 
 .. function:: utf32(s)
 
@@ -2168,7 +2168,7 @@ Text I/O
 
 .. function:: writedlm(f, A, delim='\t')
 
-   Write ``A`` (either an array type or an iterable collection of iterable rows) as text to ``f`` (either a filename string or an ``IO`` stream) using the given delimeter ``delim`` (which defaults to tab, but can be any printable Julia object, typically a ``Char`` or ``String``).
+   Write ``A`` (a vector, matrix or an iterable collection of iterable rows) as text to ``f`` (either a filename string or an ``IO`` stream) using the given delimeter ``delim`` (which defaults to tab, but can be any printable Julia object, typically a ``Char`` or ``String``).
 
    For example, two vectors ``x`` and ``y`` of the same length can
    be written as two columns of tab-delimited text to ``f`` by
@@ -2519,22 +2519,23 @@ Mathematical Operators
 
    Element-wise exponentiation operator.
 
-.. function:: div(a,b)
-              ÷(a,b)
+.. function:: div(x, y)
+              ÷(x, y)
 
-   Compute a/b, truncating to an integer.
+   The quotient from Euclidean division. Computes ``x/y``, truncated to an integer.
 
-.. function:: fld(a,b)
+.. function:: fld(x, y)
 
-   Largest integer less than or equal to a/b.
+   Largest integer less than or equal to ``x/y``.
 
-.. function:: cld(a,b)
+.. function:: cld(x, y)
 
-   Smallest integer larger than or equal to a/b.
+   Smallest integer larger than or equal to ``x/y``.
 
-.. function:: mod(x,m)
+.. function:: mod(x, y)
 
-   Modulus after division, returning in the range [0,m).
+   Modulus after division, returning in the range [0,``y``), if ``y`` is
+   positive, or (``y``,0] if ``y`` is negative.
 
 .. function:: mod2pi(x)
 
@@ -2545,18 +2546,15 @@ Mathematical Operators
    mod(x,2pi), which would compute the modulus of x relative to division by the
    floating-point number 2pi.
 
-.. function:: rem(x, m)
+.. function:: rem(x, y)
+              %(x, y)
 
-   Remainder after division.
+   Remainder from Euclidean division, returning a value of the same sign
+   as``x``, and smaller in magnitude than ``y``. This value is always exact.
 
 .. function:: divrem(x, y)
 
-   Returns ``(x/y, x%y)``.
-
-.. _%:
-.. function:: %(x, m)
-
-   Remainder after division. The operator form of ``rem``.
+   The quotient and remainder from Euclidean division. Equivalent to ``(x÷y, x%y)``.
 
 .. function:: mod1(x,m)
 
@@ -3845,7 +3843,7 @@ Integers
 
    .. doctest::
 
-      julia> leading_ones(int32(2 ^ 32 - 2))
+      julia> leading_ones(uint32(2 ^ 32 - 2))
       31
 
 .. function:: trailing_zeros(x::Integer) -> Integer
@@ -4172,9 +4170,9 @@ Indexing, Assignment, and Concatenation
 
    Broadcasts the ``X`` and ``inds`` arrays to a common size and stores the value from each position in ``X`` at the indices given by the same positions in ``inds``.
 
-.. function:: cat(dim, A...)
+.. function:: cat(dims, A...)
 
-   Concatenate the input arrays along the specified dimension
+   Concatenate the input arrays along the specified dimensions in the iterable ``dims``. For dimensions not in ``dims``, all input arrays should have the same size, which will also be the size of the output array along that dimension. For dimensions in ``dims``, the size of the output array is the sum of the sizes of the input arrays along that dimension. If ``dims`` is a single number, the different arrays are tightly stacked along that dimension. If ``dims`` is an iterable containing several dimensions, this allows to construct block diagonal matrices and their higher-dimensional analogues by simultaneously increasing several dimensions for every new input array and putting zero blocks elsewhere. For example, `cat([1,2], matrices...)` builds a block diagonal matrix, i.e. a block matrix with `matrices[1]`, `matrices[2]`, ... as diagonal blocks and matching zero blocks away from the diagonal.
 
 .. function:: vcat(A...)
 

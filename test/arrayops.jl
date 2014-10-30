@@ -72,6 +72,14 @@ tmp = zeros(Int,map(maximum,rng)...)
 tmp[rng...] = A[rng...]
 @test  tmp == cat(3,zeros(Int,2,3),[0 0 0; 0 47 52],zeros(Int,2,3),[0 0 0; 0 127 132])
 
+@test cat([1,2],1,2,3.,4.,5.) == diagm([1,2,3.,4.,5.])
+blk = [1 2;3 4]
+tmp = cat([1,3],blk,blk)
+@test tmp[1:2,1:2,1] == blk
+@test tmp[1:2,1:2,2] == zero(blk)
+@test tmp[3:4,1:2,1] == zero(blk)
+@test tmp[3:4,1:2,2] == blk
+
 x = rand(2,2)
 b = x[1,:]
 @test isequal(size(b), (1, 2))
@@ -133,6 +141,8 @@ sA = sub(A, 1:2:3, 1:3:5, 1:2:8)
 @test Base.parentdims(sA) == [1:3]
 @test strides(sA) == (2,9,30)
 @test sA[:] == A[1:2:3, 1:3:5, 1:2:8][:]
+# issue #8807
+@test sub(sub([1:5], 1:5), 1:5) == [1:5]
 
 # sub logical indexing #4763
 A = sub([1:10], 5:8)
@@ -211,7 +221,7 @@ let
     @test x == 11
     x = get(A, (4,4), -12)
     @test x == -12
-    X = get(A, -5:5, nan(Float32))
+    X = get(A, -5:5, NaN32)
     @test eltype(X) == Float32
     @test isnan(X) == [trues(6),falses(5)]
     @test X[7:11] == [1:5]

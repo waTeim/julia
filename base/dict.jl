@@ -366,7 +366,7 @@ dict_with_eltype(kv, t) = Dict{Any,Any}(kv)
 similar{K,V}(d::Dict{K,V}) = Dict{K,V}()
 
 # conversion between Dict types
-function convert{K,V}(::Type{Dict{K,V}},d::Dict)
+function convert{K,V}(::Type{Dict{K,V}},d::Associative)
     h = Dict{K,V}()
     for (k,v) in d
         ck = convert(K,k)
@@ -400,7 +400,7 @@ function deserialize{K,V}(s, T::Type{Dict{K,V}})
     return t
 end
 
-hashindex(key, sz) = (reinterpret(Int,hash(key)) & (sz-1)) + 1
+hashindex(key, sz) = ((hash(key)%Int) & (sz-1)) + 1
 
 isslotempty(h::Dict, i::Int) = h.slots[i] == 0x0
 isslotfilled(h::Dict, i::Int) = h.slots[i] == 0x1
