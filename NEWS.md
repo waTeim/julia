@@ -23,6 +23,10 @@ New language features
 Language changes
 ----------------
 
+  * `Uint` et al. are now spelled `UInt` ([#8905]).
+
+  * `String` has been renamed to `AbstractString` ([#8872]).
+
   * `None` is deprecated; use `Union()` instead ([#8423]).
 
   * `Nothing` (the type of `nothing`) is renamed to `Void` ([#8423]).
@@ -99,7 +103,7 @@ Library improvements
 
   * The `machinefile` now supports an host count ([#7616]).
 
-  * `String` has been renamed to `AbstractString`.
+  * Added optional rounding argument to floating-point constructors ([#8845])
 
 Deprecated or removed
 ---------------------
@@ -1059,3 +1063,5 @@ Too numerous to mention.
 [#8776]: https://github.com/JuliaLang/julia/issues/8776
 [#8792]: https://github.com/JuliaLang/julia/issues/8792
 [#8816]: https://github.com/JuliaLang/julia/issues/8816
+[#8845]: https://github.com/JuliaLang/julia/issues/8845
+[#8872]: https://github.com/JuliaLang/julia/issues/8872

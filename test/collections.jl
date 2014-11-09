@@ -114,7 +114,7 @@ type I1438T
     id
 end
 import Base.hash
-hash(x::I1438T, h::Uint) = hash(x.id, h)
+hash(x::I1438T, h::UInt) = hash(x.id, h)
 
 begin
     local seq, xs, s
@@ -253,6 +253,13 @@ end
 for k5886 in keys(d5886)
    # undefined ref if not fixed
    d5886[k5886] += 1
+end
+
+# issue #8877
+let
+    a = Dict("foo"  => 0.0, "bar" => 42.0)
+    b = Dict("フー" => 17, "バー" => 4711)
+    @test is(typeof(merge(a, b)), Dict{UTF8String,Float64})
 end
 
 # ############# end of dict tests #############
@@ -505,7 +512,7 @@ s = IntSet(0,1,10,20,200,300,1000,10000,10002)
 @test_throws ErrorException first(IntSet())
 @test_throws ErrorException last(IntSet())
 t = copy(s)
-sizehint(t, 20000) #check that hash does not depend on size of internal Array{Uint32, 1}
+sizehint(t, 20000) #check that hash does not depend on size of internal Array{UInt32, 1}
 @test hash(s) == hash(t)
 @test hash(complement(s)) == hash(complement(t))
 
