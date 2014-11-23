@@ -418,18 +418,37 @@ function (\)(A::StridedMatrix, B::StridedVecOrMat)
 end
 
 ## Moore-Penrose inverse
-function pinv{T}(A::StridedMatrix{T})
+function pinv{T}(A::StridedMatrix{T}, tol::Real)
+## for __dense__ ill-conditioned matrices, please use
+## the threshold tol = sqrt(eps(real(float(one(T)))))
+    m, n        = size(A)
+    (m == 0 || n == 0) && return Array(T, n, m)
+    if istril(A)
+       if( istriu(A) )
+          maxabsA = maximum(abs(diag(A)))
+          B = zeros(T,n,m);
+          for i = 1:min(m,n)
+             if( abs(A[i,i]) > tol*maxabsA && isfinite(one(T)/A[i,i]) )
+                 B[i,i] = one(T)/A[i,i]
+             end
+          end
+	  return B;
+       end
+    end
     SVD         = svdfact(A, thin=true)
     S           = eltype(SVD[:S])
-    m, n        = size(A)
-    (m == 0 || n == 0) && return Array(S, n, m)
     Sinv        = zeros(S, length(SVD[:S]))
-    index       = SVD[:S] .> sqrt(eps(real(float(one(T))))*maximum(SVD[:S]))
+    index       = SVD[:S] .> tol*maximum(SVD[:S])
     Sinv[index] = one(S) ./ SVD[:S][index]
+    Sinv[find(!isfinite(Sinv))] = zero(S)
     return SVD[:Vt]'scale(Sinv, SVD[:U]')
 end
+function pinv{T}(A::StridedMatrix{T})
+    tol = eps(real(float(one(T))))*maximum(size(A))
+    return pinv(A, tol)
+end
 pinv(a::StridedVector) = pinv(reshape(a, length(a), 1))
-pinv(x::Number) = one(x)/x
+pinv(x::Number) = isfinite(one(x)/x) ? one(x)/x : zero(x)
 
 ## Basis for null space
 function null{T}(A::StridedMatrix{T})

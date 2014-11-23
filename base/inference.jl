@@ -101,16 +101,6 @@ t_func[eq_float] = (2, 2, cmp_tfunc)
 t_func[ne_float] = (2, 2, cmp_tfunc)
 t_func[lt_float] = (2, 2, cmp_tfunc)
 t_func[le_float] = (2, 2, cmp_tfunc)
-t_func[eqfsi64] = (2, 2, cmp_tfunc)
-t_func[eqfui64] = (2, 2, cmp_tfunc)
-t_func[ltfsi64] = (2, 2, cmp_tfunc)
-t_func[ltfui64] = (2, 2, cmp_tfunc)
-t_func[lefsi64] = (2, 2, cmp_tfunc)
-t_func[lefui64] = (2, 2, cmp_tfunc)
-t_func[ltsif64] = (2, 2, cmp_tfunc)
-t_func[ltuif64] = (2, 2, cmp_tfunc)
-t_func[lesif64] = (2, 2, cmp_tfunc)
-t_func[leuif64] = (2, 2, cmp_tfunc)
 t_func[fpiseq] = (2, 2, cmp_tfunc)
 t_func[fpislt] = (2, 2, cmp_tfunc)
 t_func[nan_dom_err] = (2, 2, (a, b)->a)
@@ -2279,8 +2269,15 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     # annotate variables in the body expression with their module
     if need_mod_annotate
         mfrom = linfo.module; mto = (inference_stack::CallStack).mod
+        enc_capt = enclosing_ast.args[2][3]
+        if !isempty(enc_capt)
+            # add captured var names to list of locals
+            enc_vars = vcat(enc_locllist, map(vi->vi[1], enc_capt))
+        else
+            enc_vars = enc_locllist
+        end
         try
-            body = resolve_globals(body, enc_locllist, enclosing_ast.args[1], mfrom, mto, args, spnames)
+            body = resolve_globals(body, enc_vars, enclosing_ast.args[1], mfrom, mto, args, spnames)
         catch ex
             if isa(ex,GetfieldNode)
                 return NF

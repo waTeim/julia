@@ -515,6 +515,7 @@ export
     cumsum,
     cumsum!,
     cumsum_kbn,
+    eachindex,
     extrema,
     fill!,
     fill,

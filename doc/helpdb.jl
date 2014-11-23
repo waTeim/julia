@@ -231,20 +231,23 @@ Any[
 
    Similar to \"==\", except treats all floating-point \"NaN\" values
    as equal to each other, and treats \"-0.0\" as unequal to \"0.0\".
-   For values that are not floating-point, \"isequal\" is the same as
-   \"==\".
+   The default implementation of \"isequal\" calls \"==\", so if you
+   have a type that doesn't have these floating-point subtleties then
+   you probably only need to define \"==\".
 
    \"isequal\" is the comparison function used by hash tables
    (\"Dict\"). \"isequal(x,y)\" must imply that \"hash(x) ==
    hash(y)\".
 
+   This typically means that if you define your own \"==\" function
+   then you must define a corresponding \"hash\" (and vice versa).
    Collections typically implement \"isequal\" by calling \"isequal\"
    recursively on all contents.
 
-   Scalar types generally do not need to implement \"isequal\", unless
-   they represent floating-point numbers amenable to a more efficient
-   implementation than that provided as a generic fallback (based on
-   \"isnan\", \"signbit\", and \"==\").
+   Scalar types generally do not need to implement \"isequal\"
+   separate from \"==\", unless they represent floating-point numbers
+   amenable to a more efficient implementation than that provided as a
+   generic fallback (based on \"isnan\", \"signbit\", and \"==\").
 
 "),
 
@@ -314,8 +317,14 @@ Any[
 
    Compute an integer hash code such that \"isequal(x,y)\" implies
    \"hash(x)==hash(y)\". The optional second argument \"h\" is a hash
-   code to be mixed with the result. New types should implement the
-   2-argument form.
+   code to be mixed with the result.
+
+   New types should implement the 2-argument form, typically  by
+   calling the 2-argument \"hash\" method recursively in order to mix
+   hashes of the contents with each other (and with \"h\").
+   Typically, any type that implements \"hash\" should also implement
+   its own \"==\" (hence \"isequal\") to guarantee the property
+   mentioned above.
 
 "),
 
@@ -369,11 +378,35 @@ Any[
 
 "),
 
-("Base","convert","convert(type, x)
+("Base","convert","convert(T, x)
 
-   Try to convert \"x\" to the given type. Conversion to a different
-   numeric type will raise an \"InexactError\" if \"x\" cannot be
-   represented exactly in the new type.
+   Convert \"x\" to a value of type \"T\".
+
+   If \"T\" is an \"Integer\" type, an \"InexactError\" will be raised
+   if \"x\" is not representable by \"T\", for example if \"x\" is not
+   integer-valued, or is outside the range supported by \"T\".
+
+      julia> convert(Int, 3.0)
+      3
+
+      julia> convert(Int, 3.5)
+      ERROR: InexactError()
+       in convert at int.jl:185
+
+   If \"T\" is a \"FloatingPoint\" or \"Rational\" type, then it will
+   return the closest value to \"x\" representable by \"T\".
+
+      julia> x = 1/3
+      0.3333333333333333
+
+      julia> convert(Float32, x)
+      0.33333334f0
+
+      julia> convert(Rational{Int32}, x)
+      1//3
+
+      julia> convert(Rational{Int64}, x)
+      6004799503160661//18014398509481984
 
 "),
 
@@ -887,7 +920,11 @@ Any[
 
 ("Base","reduce","reduce(op, v0, itr)
 
-   Reduce the given collection \"ìtr\" with the given binary operator.
+   Reduce the given collection \"ìtr\" with the given binary operator
+   \"op\". \"v0\" must be a neutral element for \"op\" that will be
+   returned for empty collections. It is unspecified whether \"v0\" is
+   used for non-empty collections.
+
    Reductions for certain commonly-used operators have special
    implementations which should be used instead: \"maximum(itr)\",
    \"minimum(itr)\", \"sum(itr)\", \"prod(itr)\", \"any(itr)\",
@@ -908,31 +945,40 @@ Any[
 
 ("Base","reduce","reduce(op, itr)
 
-   Like \"reduce\" but using the first element as v0.
+   Like \"reduce(op, v0, itr)\". This cannot be used with empty
+   collections, except for some special cases (e.g. when \"op\" is one
+   of \"+\", \"*\", \"max\", \"min\", \"&\", \"|\") when Julia can
+   determine the neutral element of \"op\".
 
 "),
 
 ("Base","foldl","foldl(op, v0, itr)
 
-   Like \"reduce\", but with guaranteed left associativity.
+   Like \"reduce\", but with guaranteed left associativity. \"v0\"
+   will be used exactly once.
 
 "),
 
 ("Base","foldl","foldl(op, itr)
 
-   Like \"foldl\", but using the first element as v0.
+   Like \"foldl(op, v0, itr)\", but using the first element of \"itr\"
+   as \"v0\". In general, this cannot be used with empty collections
+   (see \"reduce(op, itr)\").
 
 "),
 
 ("Base","foldr","foldr(op, v0, itr)
 
-   Like \"reduce\", but with guaranteed right associativity.
+   Like \"reduce\", but with guaranteed right associativity. \"v0\"
+   will be used exactly once.
 
 "),
 
 ("Base","foldr","foldr(op, itr)
 
-   Like \"foldr\", but using the last element as v0.
+   Like \"foldr(op, v0, itr)\", but using the last element of \"itr\"
+   as \"v0\". In general, this cannot be used with empty collections
+   (see \"reduce(op, itr)\").
 
 "),
 
@@ -1241,17 +1287,62 @@ Any[
 
 "),
 
-("Base","mapreduce","mapreduce(f, op, itr)
+("Base","mapreduce","mapreduce(f, op, v0, itr)
 
-   Applies function \"f\" to each element in \"itr\" and then reduces
-   the result using the binary function \"op\".
+   Apply function \"f\" to each element in \"itr\", and then reduce
+   the result using the binary function \"op\". \"v0\" must be a
+   neutral element for \"op\" that will be returned for empty
+   collections. It is unspecified whether \"v0\" is used for non-empty
+   collections.
+
+   \"mapreduce\" is functionally equivalent to calling \"reduce(op,
+   v0, map(f, itr))\", but will in general execute faster since no
+   intermediate collection needs to be created. See documentation for
+   \"reduce\" and \"map\".
 
       julia> mapreduce(x->x^2, +, [1:3]) # == 1 + 4 + 9
       14
 
-   The associativity of the reduction is implementation-dependent; if
-   you need a particular associativity, e.g. left-to-right, you should
-   write your own loop. See documentation for \"reduce\".
+   The associativity of the reduction is implementation-dependent. Use
+   \"mapfoldl\" or \"mapfoldr\" instead for guaranteed left or right
+   associativity.
+
+"),
+
+("Base","mapreduce","mapreduce(f, op, itr)
+
+   Like \"mapreduce(f, op, v0, itr)\". In general, this cannot be used
+   with empty collections (see \"reduce(op, itr)\").
+
+"),
+
+("Base","mapfoldl","mapfoldl(f, op, v0, itr)
+
+   Like \"mapreduce\", but with guaranteed left associativity. \"v0\"
+   will be used exactly once.
+
+"),
+
+("Base","mapfoldl","mapfoldl(f, op, itr)
+
+   Like \"mapfoldl(f, op, v0, itr)\", but using the first element of
+   \"itr\" as \"v0\". In general, this cannot be used with empty
+   collections (see \"reduce(op, itr)\").
+
+"),
+
+("Base","mapfoldr","mapfoldr(f, op, v0, itr)
+
+   Like \"mapreduce\", but with guaranteed right associativity. \"v0\"
+   will be used exactly once.
+
+"),
+
+("Base","mapfoldr","mapfoldr(f, op, itr)
+
+   Like \"mapfoldr(f, op, v0, itr)\", but using the first element of
+   \"itr\" as \"v0\". In general, this cannot be used with empty
+   collections (see \"reduce(op, itr)\").
 
 "),
 
@@ -1432,7 +1523,26 @@ Any[
 
 ("Base","merge","merge(collection, others...)
 
-   Construct a merged collection from the given collections.
+   Construct a merged collection from the given collections. If
+   necessary, the types of the resulting collection will be promoted
+   to accommodate the types of the merged collections:
+
+      julia> a = Dict(\"foo\" => 0.0, \"bar\" => 42.0)
+      Dict{ASCIIString,Float64} with 2 entries:
+        \"bar\" => 42.0
+        \"foo\" => 0.0
+
+      julia> b = Dict(utf8(\"baz\") => 17, utf8(\"qux\") => 4711)
+      Dict{UTF8String,Int64} with 2 entries:
+        \"baz\" => 17
+        \"foo\" => 0.0
+
+      julia> merge(a, b)
+      Dict{UTF8String,Float64} with 4 entries:
+        \"qux\" => 4711.0
+        \"bar\" => 42.0
+        \"baz\" => 17.0
+        \"foo\" => 0.0
 
 "),
 
@@ -5501,6 +5611,36 @@ popdisplay(d::Display)
 
 "),
 
+("Base","Float32","Float32(x[, mode::RoundingMode])
+
+   Create a Float32 from \"x\". If \"x\" is not exactly representable
+   then \"mode\" determines how \"x\" is rounded.
+
+      julia> Float32(1/3, RoundDown)
+      0.3333333f0
+
+      julia> Float32(1/3, RoundUp)
+      0.33333334f0
+
+   See \"get_rounding\" for available rounding modes.
+
+"),
+
+("Base","Float64","Float64(x[, mode::RoundingMode])
+
+   Create a Float64 from \"x\". If \"x\" is not exactly representable
+   then \"mode\" determines how \"x\" is rounded.
+
+      julia> Float64(pi, RoundDown)
+      3.141592653589793
+
+      julia> Float64(pi, RoundUp)
+      3.1415926535897936
+
+   See \"get_rounding\" for available rounding modes.
+
+"),
+
 ("Base","BigInt","BigInt(x)
 
    Create an arbitrary precision integer. \"x\" may be an \"Int\" (or
@@ -5698,10 +5838,19 @@ popdisplay(d::Display)
 
 "),
 
-("Base","rand","rand([rng][, t::Type][, dims...])
+("Base","rand","rand([rng][, S][, dims...])
 
-   Generate a random value or an array of random values of the given
-   type, \"t\", which defaults to \"Float64\".
+   Pick a random element or array of random elements from the set of
+   values specified by \"S\"; \"S\" can be
+
+   * an indexable collection (for example \"1:n\" or
+     \"['x','y','z']\"), or
+
+   * a type: the set of values to pick from is then equivalent to
+     \"typemin(S):typemax(S)\" for integers, and to [0,1) for floating
+     point numbers;
+
+   \"S\" defaults to \"Float64\".
 
 "),
 
@@ -5711,10 +5860,10 @@ popdisplay(d::Display)
 
 "),
 
-("Base","rand","rand(r[, dims...])
+("Base","rand!","rand!([rng], r, A)
 
-   Pick a random element or array of random elements from range \"r\"
-   (for example, \"1:n\" or \"0:2:10\").
+   Populate the array A with random values drawn uniformly from the
+   range \"r\".
 
 "),
 
@@ -5873,13 +6022,22 @@ popdisplay(d::Display)
 
 ("Base","fill","fill(x, dims)
 
-   Create an array filled with the value \"x\"
+   Create an array filled with the value \"x\". For example,
+   \"fill(1.0, (10,10))\" returns a  10x10 array of floats, with each
+   element initialized to 1.0.
+
+   If \"x\" is an object reference, all elements will refer to the
+   same object. \"fill(Foo(), dims)\" will return an array filled with
+   the result of evaluating \"Foo()\" once.
 
 "),
 
 ("Base","fill!","fill!(A, x)
 
-   Fill the array \"A\" with the value \"x\"
+   Fill array \"A\" with the value \"x\". If \"x\" is an object
+   reference, all elements will refer to the same object. \"fill!(A,
+   Foo())\" will return \"A\" filled with the result of evaluating
+   \"Foo()\" once.
 
 "),
 
@@ -6202,6 +6360,17 @@ popdisplay(d::Display)
 
    Like \"permutedims()\", except the inverse of the given permutation
    is applied.
+
+"),
+
+("Base","permutedims!","permutedims!(dest, src, perm)
+
+   Permute the dimensions of array \"src\" and store the result in the
+   array \"dest\". \"perm\" is a vector specifying a permutation of
+   length \"ndims(src)\". The preallocated array \"dest\" should have
+   \"size(dest)=size(src)[perm]\" and is completely overwritten. No
+   in-place permutation is supported and unexpected results will
+   happen if *src* and *dest* have overlapping memory regions.
 
 "),
 
@@ -6603,6 +6772,36 @@ popdisplay(d::Display)
    Compute the sample variance of a vector \"v\" with known mean
    \"m\". Note: Julia does not ignore \"NaN\" values in the
    computation.
+
+"),
+
+("Base","middle","middle(x)
+
+   Compute the middle of a scalar value, which is equivalent to \"x\"
+   itself, but of the type of \"middle(x, x)\" for consistency.
+
+"),
+
+("Base","middle","middle(x, y)
+
+   Compute the middle of two reals \"x\" and \"y\", which is
+   equivalent in both value and type to computing their mean (\"(x +
+   y) / 2\").
+
+"),
+
+("Base","middle","middle(range)
+
+   Compute the middle of a range, which consists in computing the mean
+   of its extrema. Since a range is sorted, the mean is performed with
+   the first and last element.
+
+"),
+
+("Base","middle","middle(array)
+
+   Compute the middle of an array, which consists in finding its
+   extrema and then computing their mean.
 
 "),
 
@@ -7556,7 +7755,10 @@ popdisplay(d::Display)
    be on the same host.
 
    If \"pids\" is left unspecified, the shared array will be mapped
-   across all workers on the current host.
+   across all processes on the current host, including the master.
+   But, \"localindexes\" and \"indexpids\" will only refer to worker
+   processes. This facilitates work distribution code to use workers
+   for actual computation with the master process acting as a driver.
 
    If an \"init\" function of the type \"initfn(S::SharedArray)\" is
    specified, it is called on all the participating workers.
@@ -9664,13 +9866,14 @@ Millisecond(v)
 
 ("Base","tempname","tempname()
 
-   Generate a unique temporary filename.
+   Generate a unique temporary file path.
 
 "),
 
 ("Base","tempdir","tempdir()
 
-   Obtain the path of a temporary directory.
+   Obtain the path of a temporary directory (possibly shared with
+   other processes).
 
 "),
 
@@ -10771,9 +10974,29 @@ Millisecond(v)
 
 "),
 
+("Base","transpose!","transpose!(dest, src)
+
+   Transpose array \"src\" and store the result in the preallocated
+   array \"dest\", which should have a size corresponding to
+   \"(size(src,2),size(src,1))\". No in-place transposition is
+   supported and unexpected results will happen if *src* and *dest*
+   have overlapping memory regions.
+
+"),
+
 ("Base","ctranspose","ctranspose(A)
 
    The conjugate transposition operator (\"'\").
+
+"),
+
+("Base","ctranspose!","ctranspose!(dest, src)
+
+   Conjugate transpose array \"src\" and store the result in the
+   preallocated array \"dest\", which should have a size corresponding
+   to \"(size(src,2),size(src,1))\". No in-place transposition is
+   supported and unexpected results will happen if *src* and *dest*
+   have overlapping memory regions.
 
 "),
 

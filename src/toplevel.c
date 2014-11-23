@@ -75,6 +75,8 @@ void jl_module_load_time_initialize(jl_module_t *m)
         if (jl_module_init_order == NULL)
             jl_module_init_order = jl_alloc_cell_1d(0);
         jl_cell_1d_push(jl_module_init_order, (jl_value_t*)m);
+        jl_function_t *f = jl_module_get_initializer(m);
+        if (f) jl_get_specialization(f, jl_null);
     }
     else {
         jl_module_run_initializer(m);
@@ -280,7 +282,7 @@ static jl_module_t *eval_import_path_(jl_array_t *args, int retrying)
     // in A.B, look for A in Main first.
     jl_sym_t *var = (jl_sym_t*)jl_cellref(args,0);
     size_t i=1;
-    assert(jl_is_symbol(var));
+    if (!jl_is_symbol(var)) jl_type_error("import or using", (jl_value_t*)jl_sym_type, (jl_value_t*)var);
     jl_module_t *m;
 
     if (var != dot_sym) {
@@ -290,7 +292,7 @@ static jl_module_t *eval_import_path_(jl_array_t *args, int retrying)
         m = jl_current_module;
         while (1) {
             var = (jl_sym_t*)jl_cellref(args,i);
-            assert(jl_is_symbol(var));
+            if (!jl_is_symbol(var)) jl_type_error("import or using", (jl_value_t*)jl_sym_type, (jl_value_t*)var);
             i++;
             if (var != dot_sym) {
                 if (i == jl_array_len(args))

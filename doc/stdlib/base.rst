@@ -156,15 +156,15 @@ All Objects
 
    Similar to ``==``, except treats all floating-point ``NaN`` values as equal to each other,
    and treats ``-0.0`` as unequal to ``0.0``.
-   For values that are not floating-point, ``isequal`` is the same as ``==``.
+   The default implementation of ``isequal`` calls ``==``, so if you have a type that doesn't have these floating-point subtleties then you probably only need to define ``==``.
 
    ``isequal`` is the comparison function used by hash tables (``Dict``).
    ``isequal(x,y)`` must imply that ``hash(x) == hash(y)``.
 
-   Collections typically implement ``isequal`` by calling ``isequal`` recursively on
+   This typically means that if you define your own ``==`` function then you must define a corresponding ``hash`` (and vice versa).  Collections typically implement ``isequal`` by calling ``isequal`` recursively on
    all contents.
 
-   Scalar types generally do not need to implement ``isequal``, unless they
+   Scalar types generally do not need to implement ``isequal`` separate from ``==``, unless they
    represent floating-point numbers amenable to a more efficient implementation
    than that provided as a generic fallback (based on ``isnan``, ``signbit``, and ``==``).
 
@@ -207,7 +207,8 @@ All Objects
 
    Compute an integer hash code such that ``isequal(x,y)`` implies ``hash(x)==hash(y)``.
    The optional second argument ``h`` is a hash code to be mixed with the result.
-   New types should implement the 2-argument form.
+
+   New types should implement the 2-argument form, typically  by calling the 2-argument ``hash`` method recursively in order to mix hashes of the contents with each other (and with ``h``).   Typically, any type that implements ``hash`` should also implement its own ``==`` (hence ``isequal``) to guarantee the property mentioned above.
 
 .. function:: finalizer(x, function)
 
@@ -656,41 +657,55 @@ Iterable Collections
 
 .. function:: reduce(op, v0, itr)
 
-   Reduce the given collection ``ìtr`` with the given binary operator. Reductions
-   for certain commonly-used operators have special implementations which should be
-   used instead: ``maximum(itr)``, ``minimum(itr)``, ``sum(itr)``,
-   ``prod(itr)``, ``any(itr)``, ``all(itr)``.
+   Reduce the given collection ``ìtr`` with the given binary operator
+   ``op``. ``v0`` must be a neutral element for ``op`` that will be
+   returned for empty collections. It is unspecified whether ``v0`` is
+   used for non-empty collections.
 
-   The associativity of the reduction is implementation-dependent. This means
-   that you can't use non-associative operations like ``-`` because it is
-   undefined whether ``reduce(-,[1,2,3])`` should be evaluated as ``(1-2)-3``
-   or ``1-(2-3)``. Use ``foldl`` or ``foldr`` instead for guaranteed left or
-   right associativity.
+   Reductions for certain commonly-used operators have special
+   implementations which should be used instead: ``maximum(itr)``,
+   ``minimum(itr)``, ``sum(itr)``, ``prod(itr)``, ``any(itr)``,
+   ``all(itr)``.
 
-   Some operations accumulate error, and parallelism will also be easier if the
-   reduction can be executed in groups. Future versions of Julia might change
-   the algorithm. Note that the elements are not reordered if you use an ordered
-   collection.
+   The associativity of the reduction is implementation-dependent.
+   This means that you can't use non-associative operations like ``-``
+   because it is undefined whether ``reduce(-,[1,2,3])`` should be
+   evaluated as ``(1-2)-3`` or ``1-(2-3)``. Use ``foldl`` or ``foldr``
+   instead for guaranteed left or right associativity.
+
+   Some operations accumulate error, and parallelism will also be
+   easier if the reduction can be executed in groups. Future versions
+   of Julia might change the algorithm. Note that the elements are not
+   reordered if you use an ordered collection.
 
 .. function:: reduce(op, itr)
 
-   Like ``reduce`` but using the first element as v0.
+   Like ``reduce(op, v0, itr)``. This cannot be used with empty
+   collections, except for some special cases (e.g. when ``op`` is one
+   of ``+``, ``*``, ``max``, ``min``, ``&``, ``|``) when Julia can
+   determine the neutral element of ``op``.
 
 .. function:: foldl(op, v0, itr)
 
-   Like ``reduce``, but with guaranteed left associativity.
+   Like ``reduce``, but with guaranteed left associativity. ``v0``
+   will be used exactly once.
 
 .. function:: foldl(op, itr)
 
-   Like ``foldl``, but using the first element as v0.
+   Like ``foldl(op, v0, itr)``, but using the first element of ``itr``
+   as ``v0``. In general, this cannot be used with empty collections
+   (see ``reduce(op, itr)``).
 
 .. function:: foldr(op, v0, itr)
 
-   Like ``reduce``, but with guaranteed right associativity.
+   Like ``reduce``, but with guaranteed right associativity. ``v0``
+   will be used exactly once.
 
 .. function:: foldr(op, itr)
 
-   Like ``foldr``, but using the last element as v0.
+   Like ``foldr(op, v0, itr)``, but using the last element of ``itr``
+   as ``v0``. In general, this cannot be used with empty collections
+   (see ``reduce(op, itr)``).
 
 .. function:: maximum(itr)
 
@@ -907,18 +922,54 @@ Iterable Collections
    new collection. ``destination`` must be at least as large as the first
    collection.
 
-.. function:: mapreduce(f, op, itr)
+.. function:: mapreduce(f, op, v0, itr)
 
-   Applies function ``f`` to each element in ``itr`` and then reduces the result using the binary function ``op``.
+   Apply function ``f`` to each element in ``itr``, and then reduce
+   the result using the binary function ``op``. ``v0`` must be a
+   neutral element for ``op`` that will be returned for empty
+   collections. It is unspecified whether ``v0`` is used for non-empty
+   collections.
+
+   ``mapreduce`` is functionally equivalent to calling ``reduce(op,
+   v0, map(f, itr))``, but will in general execute faster since no
+   intermediate collection needs to be created. See documentation for
+   ``reduce`` and ``map``.
 
    .. doctest::
 
       julia> mapreduce(x->x^2, +, [1:3]) # == 1 + 4 + 9
       14
 
-   The associativity of the reduction is implementation-dependent; if you
-   need a particular associativity, e.g. left-to-right, you should write
-   your own loop. See documentation for ``reduce``.
+   The associativity of the reduction is implementation-dependent. Use
+   ``mapfoldl`` or ``mapfoldr`` instead for guaranteed left or right
+   associativity.
+
+.. function:: mapreduce(f, op, itr)
+
+   Like ``mapreduce(f, op, v0, itr)``. In general, this cannot be used
+   with empty collections (see ``reduce(op, itr)``).
+
+.. function:: mapfoldl(f, op, v0, itr)
+
+   Like ``mapreduce``, but with guaranteed left associativity. ``v0``
+   will be used exactly once.
+
+.. function:: mapfoldl(f, op, itr)
+
+   Like ``mapfoldl(f, op, v0, itr)``, but using the first element of
+   ``itr`` as ``v0``. In general, this cannot be used with empty
+   collections (see ``reduce(op, itr)``).
+
+.. function:: mapfoldr(f, op, v0, itr)
+
+   Like ``mapreduce``, but with guaranteed right associativity. ``v0``
+   will be used exactly once.
+
+.. function:: mapfoldr(f, op, itr)
+
+   Like ``mapfoldr(f, op, v0, itr)``, but using the first element of
+   ``itr`` as ``v0``. In general, this cannot be used with empty
+   collections (see ``reduce(op, itr)``).
 
 .. function:: first(coll)
 
@@ -1062,7 +1113,24 @@ Given a dictionary ``D``, the syntax ``D[x]`` returns the value of key ``x`` (if
 
 .. function:: merge(collection, others...)
 
-   Construct a merged collection from the given collections.
+   Construct a merged collection from the given collections. If necessary, the types of the resulting collection will be promoted to accommodate the types of the merged collections::
+
+     julia> a = Dict("foo" => 0.0, "bar" => 42.0)
+     Dict{ASCIIString,Float64} with 2 entries:
+       "bar" => 42.0
+       "foo" => 0.0
+
+     julia> b = Dict(utf8("baz") => 17, utf8("qux") => 4711)
+     Dict{UTF8String,Int64} with 2 entries:
+       "baz" => 17
+       "foo" => 0.0
+
+     julia> merge(a, b)
+     Dict{UTF8String,Float64} with 4 entries:
+       "qux" => 4711.0
+       "bar" => 42.0
+       "baz" => 17.0
+       "foo" => 0.0
 
 .. function:: merge!(collection, others...)
 
@@ -4003,17 +4071,19 @@ A ``MersenneTwister`` RNG can generate random numbers of the following types: ``
 
    Create a ``MersenneTwister`` RNG object. Different RNG objects can have their own seeds, which may be useful for generating different streams of random numbers.
 
-.. function:: rand([rng], [t::Type], [dims...])
+.. function:: rand([rng], [S], [dims...])
 
-   Generate a random value or an array of random values of the given type, ``t``, which defaults to ``Float64``.
+   Pick a random element or array of random elements from the set of values specified by ``S``; ``S`` can be
 
-.. function:: rand!([rng], A)
+   * an indexable collection (for example ``1:n`` or ``['x','y','z']``), or
 
-   Populate the array A with random values.
+   * a type: the set of values to pick from is then equivalent to ``typemin(S):typemax(S)`` for integers, and to [0,1) for floating point numbers;
 
-.. function:: rand(r, [dims...])
+   ``S`` defaults to ``Float64``.
 
-   Pick a random element or array of random elements from range ``r`` (for example, ``1:n`` or ``0:2:10``).
+.. function:: rand!([rng], A ,[coll])
+
+   Populate the array A with random values. If the indexable collection ``coll`` is specified, the values are picked randomly from ``coll``. This is equivalent to ``copy!(A, rand(rng, coll, size(A)))`` or ``copy!(A, rand(rng, eltype(A), size(A)))`` but without allocating a new array.
 
 .. function:: randbool([rng], [dims...])
 
@@ -4048,6 +4118,32 @@ Basic functions
 .. function:: length(A) -> Integer
 
    Returns the number of elements in A
+
+.. function:: eachindex(A)
+
+   Creates an iterable object for visiting each multi-dimensional index of the AbstractArray ``A``.  Example for a 2-d array::
+
+    julia> A = rand(2,3)
+    2x3 Array{Float64,2}:
+     0.960084  0.629326  0.625155
+     0.432588  0.955903  0.991614
+
+    julia> for iter in eachindex(A)
+	       @show iter.I_1, iter.I_2
+	       @show A[iter]
+	   end
+    (iter.I_1,iter.I_2) = (1,1)
+    A[iter] = 0.9600836263003063
+    (iter.I_1,iter.I_2) = (2,1)
+    A[iter] = 0.4325878255452178
+    (iter.I_1,iter.I_2) = (1,2)
+    A[iter] = 0.6293256402775211
+    (iter.I_1,iter.I_2) = (2,2)
+    A[iter] = 0.9559027084099654
+    (iter.I_1,iter.I_2) = (1,3)
+    A[iter] = 0.6251548453735303
+    (iter.I_1,iter.I_2) = (2,3)
+    A[iter] = 0.9916142534546522
 
 .. function:: countnz(A)
 
@@ -4115,11 +4211,17 @@ Constructors
 
 .. function:: fill(x, dims)
 
-   Create an array filled with the value ``x``
+   Create an array filled with the value ``x``.
+   For example, ``fill(1.0, (10,10))`` returns a  10x10 array of floats, with each
+   element initialized to 1.0.
+
+   If ``x`` is an object reference, all elements will refer to the same object.
+   ``fill(Foo(), dims)`` will return an array filled with the result of evaluating ``Foo()`` once.
 
 .. function:: fill!(A, x)
 
-   Fill the array ``A`` with the value ``x``
+   Fill array ``A`` with the value ``x``. If ``x`` is an object reference, all elements will refer to the same object.
+   ``fill!(A, Foo())`` will return ``A`` filled with the result of evaluating ``Foo()`` once.
 
 .. function:: reshape(A, dims)
 
@@ -4617,18 +4719,17 @@ Statistics
 
 .. function:: middle(x)
 
-   Compute the middle of a scalar value, which is equivalent to ``x`` itself.
-   Note: the value is converted to ``float``.
+   Compute the middle of a scalar value, which is equivalent to ``x`` itself,
+   but of the type of ``middle(x, x)`` for consistency.
 
 .. function:: middle(x, y)
 
    Compute the middle of two reals ``x`` and ``y``, which is equivalent
-   to computing their mean (``(x + y) / 2``).
-   Note: As with ``middle(x)``, the returned value is of type ``float``.
+   in both value and type to computing their mean (``(x + y) / 2``).
 
 .. function:: middle(range)
 
-   Compute the middle of a range, that is, compute the mean of its extrema.
+   Compute the middle of a range, which consists in computing the mean of its extrema.
    Since a range is sorted, the mean is performed with the first and last element.
 
 .. function:: middle(array)

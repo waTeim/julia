@@ -25,11 +25,27 @@ A = zeros(2, 2)
 rand!(MersenneTwister(0), A)
 @test A == [0.8236475079774124  0.16456579813368521;
             0.9103565379264364  0.17732884646626457]
-@test rand(MersenneTwister(0), Int64, 1) == [172014471070449746]
+@test rand(MersenneTwister(0), Int64, 1) == [4439861565447045202]
 A = zeros(Int64, 2, 2)
 rand!(MersenneTwister(0), A)
 @test A == [858542123778948672  5715075217119798169;
             8690327730555225005 8435109092665372532]
+
+# rand from AbstractArray
+let mt = MersenneTwister()
+    srand(mt)
+    @test rand(mt, 0:3:1000) in 0:3:1000
+    @test issubset(rand!(mt, Array(Int, 100), 0:3:1000), 0:3:1000)
+    coll = Any[2, UInt128(128), big(619), "string", 'c']
+    @test rand(mt, coll) in coll
+    @test issubset(rand(mt, coll, 2, 3), coll)
+
+    # check API with default RNG:
+    rand(0:3:1000)
+    rand!(Array(Int, 100), 0:3:1000)
+    rand(coll)
+    rand(coll, 2, 3)
+end
 
 # randn
 @test randn(MersenneTwister(42)) == -0.5560268761463861
@@ -199,7 +215,6 @@ let mt = MersenneTwister(0)
                                    0x066d8695ebf85f833427c93416193e1f,
                                    0x48fab49cc9fcee1c920d6dae629af446,
                                    0x4b54632b4619f4eca22675166784d229][i]
-
     end
 
     srand(mt,0)
@@ -211,7 +226,7 @@ let mt = MersenneTwister(0)
         @test A[end] == Any[21,0x7b,17385,0x3086,-1574090021,0xadcb4460,6797283068698303107,0x4e91c9c4d4f5f759,
                             -3482609696641744459568613291754091152,float16(0.03125),0.68733835f0][i]
 
-        @test B[end] == Any[49,0x65,-3725,0x719d,814246081,0xdf61843a,-1603010949539670188,0x5e4ca1658810985d,
+        @test B[end] == Any[49,0x65,-3725,0x719d,814246081,0xdf61843a,-3010919637398300844,0x61b367cf8810985d,
                             -33032345278809823492812856023466859769,float16(0.9346),0.5929704f0][i]
     end
 
@@ -221,4 +236,32 @@ let mt = MersenneTwister(0)
     @test rand!(mt, AF64)[end] == 0.6492481059865669
     resize!(AF64, 2*length(mt.vals))
     @test Base.Random.rand_AbstractArray_Float64!(mt, AF64)[end]  == 0.432757268470779
+end
+
+# Issue #9037
+let mt = MersenneTwister()
+    a = Array(Float64, 0)
+    resize!(a, 1000) # could be 8-byte aligned
+    b = Array(Float64, 1000) # should be 16-byte aligned
+    c8 = Array(UInt8, 8001)
+    c = pointer_to_array(Ptr{Float64}(pointer(c8, 2)), 1000) # Int(pointer(c)) % 16 == 1
+
+    for A in (a, b, c)
+        srand(mt, 0)
+        rand(mt) # this is to fill mt.vals, cf. #9040
+        rand!(mt, A) # must not segfault even if Int(pointer(A)) % 16 != 0
+        @test A[end-4:end] == [0.49508297796349776,0.3408340446375888,0.3211229457075784,0.9103565379264364,0.16456579813368521]
+    end
+end
+
+# test rand! API: rand!([rng], A, [coll])
+let mt = MersenneTwister(0)
+    for T in [Base.IntTypes..., Float16, Float32, Float64]
+        for A in (Array(T, 5), Array(T, 2, 2))
+            rand!(A)
+            rand!(mt, A)
+            rand!(A, T[1,2,3])
+            rand!(mt, A, T[1,2,3])
+        end
+    end
 end

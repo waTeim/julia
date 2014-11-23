@@ -623,8 +623,6 @@ static Function *to_function(jl_lambda_info_t *li, bool cstyle)
     return f;
 }
 
-extern "C" jl_function_t *jl_get_specialization(jl_function_t *f, jl_tuple_t *types);
-
 static void jl_setup_module(Module *m, bool add)
 {
     m->addModuleFlag(llvm::Module::Warning, "Dwarf Version",3);
@@ -2622,9 +2620,13 @@ static Value *emit_var(jl_sym_t *sym, jl_value_t *ty, jl_codectx_t *ctx, bool is
     }
     assert(jbp == NULL);
     if (arg != NULL ||    // arguments are always defined
+        !vi.isAssigned ||
         (!is_var_closed(sym, ctx) &&
          !jl_subtype((jl_value_t*)jl_undef_type, ty, 0))) {
-        return tpropagate(bp, builder.CreateLoad(bp, vi.isVolatile));
+        Value *theLoad = builder.CreateLoad(bp, vi.isVolatile);
+        if (vi.closureidx > -1 && !(vi.isAssigned && vi.isCaptured))
+            theLoad = tbaa_decorate(tbaa_const, (Instruction*)theLoad);
+        return tpropagate(bp, theLoad);
     }
     return emit_checked_var(bp, sym, ctx, vi.isVolatile);
 }

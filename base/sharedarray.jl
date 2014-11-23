@@ -26,7 +26,6 @@ function SharedArray(T::Type, dims::NTuple; init=false, pids=Int[])
     N = length(dims)
 
     isbits(T) || error("Type of Shared Array elements must be bits types")
-    @windows_only error(" SharedArray is not supported on Windows yet.")
 
     if isempty(pids)
         # only use workers on the current host
@@ -75,10 +74,11 @@ function SharedArray(T::Type, dims::NTuple; init=false, pids=Int[])
         # All good, immediately unlink the segment.
         if prod(dims) > 0
             if onlocalhost
-                shm_unlink(shm_seg_name)
+                rc = shm_unlink(shm_seg_name)
             else
-                remotecall_fetch(shmmem_create_pid, shm_unlink, shm_seg_name)
+                rc = remotecall_fetch(shmmem_create_pid, shm_unlink, shm_seg_name)
             end
+            systemerror("Error unlinking shmem segment " * shm_seg_name, rc != 0)
         end
         S = SharedArray{T,N}(dims, pids, refs, shm_seg_name)
         shm_seg_name = ""
@@ -206,16 +206,16 @@ end
 
 convert(::Type{Array}, S::SharedArray) = S.s
 
-# # pass through getindex and setindex! - they always work on the complete array unlike DArrays
+# pass through getindex and setindex! - they always work on the complete array unlike DArrays
 getindex(S::SharedArray) = getindex(S.s)
 getindex(S::SharedArray, I::Real) = getindex(S.s, I)
 getindex(S::SharedArray, I::AbstractArray) = getindex(S.s, I)
-@nsplat N 1:5 getindex(S::SharedArray, I::NTuple{N,Any}...) = getindex(S.s, I...)
+@nsplat N 1:5 getindex(S::SharedArray, I::NTuple{N,Union(Real,AbstractVector)}...) = getindex(S.s, I...)
 
-setindex!(S::SharedArray, x) = (setindex!(S.s, x); S)
-setindex!(S::SharedArray, x, I::Real) = (setindex!(S.s, x, I); S)
-setindex!(S::SharedArray, x, I::AbstractArray) = (setindex!(S.s, x, I); S)
-@nsplat N 1:5 setindex!(S::SharedArray, x, I::NTuple{N,Any}...) = (setindex!(S.s, x, I...); S)
+setindex!(S::SharedArray, x) = setindex!(S.s, x)
+setindex!(S::SharedArray, x, I::Real) = setindex!(S.s, x, I)
+setindex!(S::SharedArray, x, I::AbstractArray) = setindex!(S.s, x, I)
+@nsplat N 1:5 setindex!(S::SharedArray, x, I::NTuple{N,Union(Real,AbstractVector)}...) = setindex!(S.s, x, I...)
 
 function fill!(S::SharedArray, v)
     f = S->fill!(S.loc_subarr_1d, v)
@@ -343,19 +343,7 @@ function shm_mmap_array(T, dims, shm_seg_name, mode)
     end
 
     try
-        fd_mem = shm_open(shm_seg_name, mode, S_IRUSR | S_IWUSR)
-        systemerror("shm_open() failed for " * shm_seg_name, fd_mem <= 0)
-
-        s = fdio(fd_mem, true)
-
-        # On OSX, ftruncate must to used to set size of segment, just lseek does not work.
-        # and only at creation time
-        if (mode & JL_O_CREAT) == JL_O_CREAT
-            rc = ccall(:ftruncate, Int, (Int, Int), fd_mem, prod(dims)*sizeof(T))
-            systemerror("ftruncate() failed for shm segment " * shm_seg_name, rc != 0)
-        end
-
-        A = mmap_array(T, dims, s, zero(FileOffset), grow=false)
+        A = _shm_mmap_array(T, dims, shm_seg_name, mode)
     catch e
         print_shmem_limits(prod(dims)*sizeof(T))
         rethrow(e)
@@ -368,14 +356,42 @@ function shm_mmap_array(T, dims, shm_seg_name, mode)
     A
 end
 
+
+# platform-specific code
+
 @unix_only begin
-function shm_unlink(shm_seg_name)
-    rc = ccall(:shm_unlink, Cint, (Ptr{UInt8},), shm_seg_name)
-    systemerror("Error unlinking shmem segment " * shm_seg_name, rc != 0)
-    rc
+
+function _shm_mmap_array(T, dims, shm_seg_name, mode)
+    fd_mem = shm_open(shm_seg_name, mode, S_IRUSR | S_IWUSR)
+    systemerror("shm_open() failed for " * shm_seg_name, fd_mem <= 0)
+
+    s = fdio(fd_mem, true)
+
+    # On OSX, ftruncate must to used to set size of segment, just lseek does not work.
+    # and only at creation time
+    if (mode & JL_O_CREAT) == JL_O_CREAT
+        rc = ccall(:ftruncate, Int, (Int, Int), fd_mem, prod(dims)*sizeof(T))
+        systemerror("ftruncate() failed for shm segment " * shm_seg_name, rc != 0)
+    end
+
+    mmap_array(T, dims, s, zero(FileOffset), grow=false)
 end
+
+shm_unlink(shm_seg_name) = ccall(:shm_unlink, Cint, (Ptr{UInt8},), shm_seg_name)
+shm_open(shm_seg_name, oflags, permissions) = ccall(:shm_open, Int, (Ptr{UInt8}, Int, Int), shm_seg_name, oflags, permissions)
+
+end # @unix_only
+
+@windows_only begin
+
+function _shm_mmap_array(T, dims, shm_seg_name, mode)
+    readonly = !((mode & JL_O_RDWR) == JL_O_RDWR)
+    create = (mode & JL_O_CREAT) == JL_O_CREAT
+    s = SharedMemSpec(shm_seg_name, readonly, create)
+    mmap_array(T, dims, s, zero(FileOffset))
 end
 
-@unix_only shm_open(shm_seg_name, oflags, permissions) = ccall(:shm_open, Int, (Ptr{UInt8}, Int, Int), shm_seg_name, oflags, permissions)
+# no-op in windows
+shm_unlink(shm_seg_name) = 0
 
-
+end # @windows_only

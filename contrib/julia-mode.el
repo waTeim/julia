@@ -179,7 +179,7 @@ This function provides equivalent functionality, but makes no efforts to optimis
 (defconst julia-builtin-types-regex
   (julia--regexp-opt
    '("Number" "Real" "BigInt" "Integer"
-     "Uint" "Uint8" "Uint16" "Uint32" "Uint64" "Uint128"
+     "UInt" "UInt8" "UInt16" "UInt32" "UInt64" "UInt128"
      "Int" "Int8" "Int16" "Int32" "Int64" "Int128"
      "BigFloat" "FloatingPoint" "Float16" "Float32" "Float64"
      "Complex128" "Complex64" "ComplexPair"
@@ -483,6 +483,7 @@ before point. Returns nil if we're not within nested parens."
 ;        println("(puthash \"$ks\" \"$vs\" julia-latexsubs)")
 ;    end
 ;end
+; (See Julia issue #8947 for why we don't use the Emacs tex input mode.)
 (puthash "\\textexclamdown" "¡" julia-latexsubs)
 (puthash "\\sterling" "£" julia-latexsubs)
 (puthash "\\yen" "¥" julia-latexsubs)

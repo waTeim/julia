@@ -803,7 +803,6 @@ STATIC_INLINE jl_function_t *jl_get_function(jl_module_t *m, const char *name)
 {
     return  (jl_function_t*) jl_get_global(m, jl_symbol(name));
 }
-DLLEXPORT int jl_module_has_initializer(jl_module_t *m);
 DLLEXPORT void jl_module_run_initializer(jl_module_t *m);
 jl_function_t *jl_module_call_func(jl_module_t *m);
 
@@ -995,11 +994,12 @@ DLLEXPORT void jl_handle_stack_switch();
 
 #ifdef COPY_STACKS
 // initialize base context of root task
+extern jl_jmp_buf jl_base_ctx;
 #define JL_SET_STACK_BASE                               \
     {                                                   \
         int __stk;                                      \
         jl_root_task->stackbase = (char*)&__stk;        \
-        if (jl_setjmp(jl_root_task->base_ctx, 1)) {     \
+        if (jl_setjmp(jl_base_ctx, 1)) {                \
             jl_handle_stack_switch();                   \
         }                                               \
     }
@@ -1152,7 +1152,6 @@ typedef struct _jl_task_t {
         void *stackbase;
         void *stack;
     };
-    jl_jmp_buf base_ctx;
     size_t bufsz;
     void *stkbuf;
     size_t ssize;

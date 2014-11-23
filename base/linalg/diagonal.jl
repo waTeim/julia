@@ -122,6 +122,26 @@ function inv{T}(D::Diagonal{T})
     Diagonal(Di)
 end
 
+function pinv{T}(D::Diagonal{T})
+    Di = similar(D.diag)
+    for i = 1:length(D.diag)
+        isfinite(inv(D.diag[i])) ? Di[i]=inv(D.diag[i]) : Di[i]=zero(T)
+    end
+    Diagonal(Di)
+end
+function pinv{T}(D::Diagonal{T}, tol::Real)
+    Di = similar(D.diag)
+    if( length(D.diag) != 0 ) maxabsD = maximum(abs(D.diag)) end
+    for i = 1:length(D.diag)
+        if( abs(D.diag[i]) > tol*maxabsD && isfinite(inv(D.diag[i])) )
+            Di[i]=inv(D.diag[i])
+        else
+            Di[i]=zero(T)
+        end
+    end
+    Diagonal(Di)
+end
+
 #Eigensystem
 eigvals{T<:Number}(D::Diagonal{T}) = D.diag
 eigvals(D::Diagonal) = [eigvals(x) for x in D.diag] #For block matrices, etc.
